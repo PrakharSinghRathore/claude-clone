@@ -1,0 +1,218 @@
+"""
+Configuration management for Claude Clone.
+Handles API keys, model settings, MCP servers, and user preferences.
+"""
+
+import json
+import os
+import sys
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+
+DEFAULT_CONFIG_DIR = Path.home() / ".claude_clone"
+DEFAULT_CONFIG_FILE = DEFAULT_CONFIG_DIR / "config.json"
+
+
+class Config:
+    """Manages all configuration for the Claude Clone application."""
+
+    DEFAULTS = {
+        "model": "claude-sonnet-4-20250514",
+        "max_tokens": 8192,
+        "max_iterations": 10,
+        "theme": "dark",
+        "temperature": 1.0,
+        "mcp_servers": [],
+        "allowed_tools": [],
+        "disabled_tools": [],
+        "auto_approve_tools": [],
+        "system_prompt_overrides": {},
+        "context_files": [],
+        "cost_warning_threshold": 1.0,
+    }
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        max_iterations: Optional[int] = None,
+        theme: Optional[str] = None,
+        temperature: Optional[float] = None,
+        mcp_servers: Optional[List[Dict]] = None,
+        allowed_tools: Optional[List[str]] = None,
+        disabled_tools: Optional[List[str]] = None,
+        auto_approve_tools: Optional[List[str]] = None,
+        system_prompt_overrides: Optional[Dict[str, str]] = None,
+        context_files: Optional[List[str]] = None,
+        cost_warning_threshold: Optional[float] = None,
+        cwd: Optional[str] = None,
+    ):
+        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        self.model = model or self.DEFAULTS["model"]
+        self.max_tokens = max_tokens or self.DEFAULTS["max_tokens"]
+        self.max_iterations = max_iterations or self.DEFAULTS["max_iterations"]
+        self.theme = theme or self.DEFAULTS["theme"]
+        self.temperature = temperature if temperature is not None else self.DEFAULTS["temperature"]
+        self.mcp_servers = mcp_servers or list(self.DEFAULTS["mcp_servers"])
+        self.allowed_tools = allowed_tools or list(self.DEFAULTS["allowed_tools"])
+        self.disabled_tools = disabled_tools or list(self.DEFAULTS["disabled_tools"])
+        self.auto_approve_tools = auto_approve_tools or list(self.DEFAULTS["auto_approve_tools"])
+        self.system_prompt_overrides = system_prompt_overrides or dict(self.DEFAULTS["system_prompt_overrides"])
+        self.context_files = context_files or list(self.DEFAULTS["context_files"])
+        self.cost_warning_threshold = cost_warning_threshold or self.DEFAULTS["cost_warning_threshold"]
+        self.cwd = cwd or os.getcwd()
+        self._config_path = DEFAULT_CONFIG_FILE
+
+    @classmethod
+    def from_env(cls) -> "Config":
+        """Create a Config instance from environment variables and config file."""
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        model = os.environ.get("CLAUDE_MODEL")
+        max_tokens = os.environ.get("CLAUDE_MAX_TOKENS")
+        max_iterations = os.environ.get("CLAUDE_MAX_ITERATIONS")
+        theme = os.environ.get("CLAUDE_THEME")
+
+        config = cls(
+            api_key=api_key or None,
+            model=model or None,
+            max_tokens=int(max_tokens) if max_tokens else None,
+            max_iterations=int(max_iterations) if max_iterations else None,
+            theme=theme or None,
+        )
+
+        if not config.api_key:
+            config.load()
+
+        return config
+
+    @classmethod
+    def load(cls, path: Optional[str] = None) -> "Config":
+        """Load configuration from a JSON file."""
+        config_path = Path(path) if path else DEFAULT_CONFIG_FILE
+
+        if not config_path.exists():
+            config = cls()
+            config._config_path = config_path
+            return config
+
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"Warning: Could not load config from {config_path}: {e}")
+            return cls()
+
+        kwargs = {}
+        for key in cls.DEFAULTS:
+            if key in data:
+                kwargs[key] = data[key]
+
+        config = cls(**kwargs)
+        config._config_path = config_path
+
+        if "api_key" in data and data["api_key"]:
+            config.api_key = data["api_key"]
+
+        return config
+
+    def save(self, path: Optional[str] = None) -> None:
+        """Save current configuration to a JSON file."""
+        config_path = Path(path) if path else self._config_path
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
+        data = {
+            "model": self.model,
+            "max_tokens": self.max_tokens,
+            "max_iterations": self.max_iterations,
+            "theme": self.theme,
+            "temperature": self.temperature,
+            "mcp_servers": self.mcp_servers,
+            "allowed_tools": self.allowed_tools,
+            "disabled_tools": self.disabled_tools,
+            "auto_approve_tools": self.auto_approve_tools,
+            "system_prompt_overrides": self.system_prompt_overrides,
+            "context_files": self.context_files,
+            "cost_warning_threshold": self.cost_warning_threshold,
+        }
+
+        # Only save API key if explicitly set (not from env)
+        api_key_stored = os.environ.get("ANTHROPIC_API_KEY", "")
+        if self.api_key and self.api_key != api_key_stored:
+            data["api_key"] = self.api_key
+
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, default=str)
+
+        os.chmod(config_path, 0o600)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Return configuration as a dictionary."""
+        return {
+            "model": self.model,
+            "max_tokens": self.max_tokens,
+            "max_iterations": self.max_iterations,
+            "theme": self.theme,
+            "temperature": self.temperature,
+            "cwd": self.cwd,
+            "api_key_set": bool(self.api_key),
+            "mcp_servers_count": len(self.mcp_servers),
+            "allowed_tools": self.allowed_tools,
+            "disabled_tools": self.disabled_tools,
+        }
+
+    def validate(self) -> List[str]:
+        """Validate the current configuration and return a list of warnings."""
+        warnings = []
+
+        if not self.api_key:
+            warnings.append("No API key set. Set ANTHROPIC_API_KEY or run: claude-clone config set-api-key")
+
+        if self.max_tokens < 1 or self.max_tokens > 200000:
+            warnings.append(f"max_tokens={self.max_tokens} is outside recommended range [1, 200000]")
+
+        if self.max_iterations < 1 or self.max_iterations > 100:
+            warnings.append(f"max_iterations={self.max_iterations} is outside recommended range [1, 100]")
+
+        if self.theme not in ("dark", "light"):
+            warnings.append(f"Unknown theme: {self.theme}. Use 'dark' or 'light'")
+
+        if self.temperature < 0 or self.temperature > 2:
+            warnings.append(f"temperature={self.temperature} is outside range [0, 2]")
+
+        return warnings
+
+    def get_effective_tools(self, all_tools: Dict) -> Dict:
+        """Filter the tool registry based on allowed/disabled lists."""
+        if self.allowed_tools:
+            return {k: v for k, v in all_tools.items() if k in self.allowed_tools}
+        result = dict(all_tools)
+        for t in self.disabled_tools:
+            result.pop(t, None)
+        return result
+
+    def ensure_config_dir(self) -> Path:
+        """Ensure the configuration directory exists."""
+        DEFAULT_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        return DEFAULT_CONFIG_DIR
+
+    def get_cost_estimate(self, input_tokens: int, output_tokens: int) -> float:
+        """Estimate cost in USD based on model pricing."""
+        pricing = {
+            "claude-opus-4-20250514": (15.0, 75.0),
+            "claude-sonnet-4-20250514": (3.0, 15.0),
+            "claude-3-5-sonnet-20241022": (3.0, 15.0),
+            "claude-3-5-haiku-20241022": (0.8, 4.0),
+            "claude-3-opus-20240229": (15.0, 75.0),
+            "claude-3-sonnet-20240229": (3.0, 15.0),
+            "claude-3-haiku-20240307": (0.25, 1.25),
+        }
+        input_cost, output_cost = pricing.get(self.model, (3.0, 15.0))
+        return (input_tokens / 1_000_000) * input_cost + (output_tokens / 1_000_000) * output_cost
