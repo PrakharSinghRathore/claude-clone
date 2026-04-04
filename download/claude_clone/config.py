@@ -85,6 +85,43 @@ class Config:
             "server_port": 8765,
             "default_room": "default"
         },
+        "desktop": {
+            "enabled": True,
+            "mode": "ACTIVE",
+            "awareness": {
+                "monitor_clipboard": True,
+                "monitor_windows": True,
+                "screenshot_on_request": True,
+                "ocr_enabled": True,
+                "snapshot_interval": 5,
+                "window_history_minutes": 30
+            },
+            "voice": {
+                "enabled": False,
+                "stt_engine": "google",
+                "tts_engine": "pyttsx3",
+                "wake_word": "hey claude",
+                "language": "en-US",
+                "continuous": False,
+                "volume": 0.8,
+                "rate": 1.0
+            },
+            "controller": {
+                "enabled": True,
+                "smooth_mouse": True,
+                "human_typing": True,
+                "recording_enabled": True
+            },
+            "permissions": {
+                "level": "STANDARD",
+                "auto_approve_read": True,
+                "ask_before_delete": True,
+                "ask_before_install": True,
+                "ask_before_shell": True,
+                "audit_log": True,
+                "max_audit_entries": 50000
+            }
+        },
     }
 
     # OpenRouter / Anthropic base URL
@@ -143,6 +180,7 @@ class Config:
         self.deployment = dict(self.DEFAULTS["deployment"])
         self.plugins = dict(self.DEFAULTS["plugins"])
         self.collaboration = dict(self.DEFAULTS["collaboration"])
+        self.desktop = dict(self.DEFAULTS["desktop"])
 
     def _detect_provider(self) -> str:
         """Detect API provider from available keys."""
@@ -221,7 +259,7 @@ class Config:
             config.active_agent = data["active_agent"]
 
         # Load new feature section configs
-        for section in ("sandbox", "memory", "analyzer", "security", "deployment", "plugins", "collaboration"):
+        for section in ("sandbox", "memory", "analyzer", "security", "deployment", "plugins", "collaboration", "desktop"):
             if section in data and isinstance(data[section], dict):
                 merged = dict(getattr(config, section))
                 merged.update(data[section])
@@ -257,6 +295,7 @@ class Config:
             "deployment": self.deployment,
             "plugins": self.plugins,
             "collaboration": self.collaboration,
+            "desktop": self.desktop,
         }
 
         # Only save API key if explicitly set (not from env)
@@ -292,6 +331,7 @@ class Config:
             "deployment": self.deployment,
             "plugins": self.plugins,
             "collaboration": self.collaboration,
+            "desktop": self.desktop,
         }
 
     def validate(self) -> List[str]:
@@ -380,3 +420,7 @@ class Config:
     def get_collaboration_config(self) -> dict:
         """Return a copy of the collaboration configuration."""
         return dict(self.collaboration)
+
+    def get_desktop_config(self) -> dict:
+        """Return a copy of the desktop configuration."""
+        return dict(self.desktop)

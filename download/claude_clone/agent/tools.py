@@ -1721,6 +1721,633 @@ async def git_repo_stats() -> str:
 
 
 # ──────────────────────────────────────────────
+# DESKTOP TOOLS
+# ──────────────────────────────────────────────
+
+# System Info Tools
+
+async def desktop_system_info() -> str:
+    """Get complete system information including CPU, RAM, disk, GPU, battery, and network.
+
+    Returns a formatted summary of the current desktop system state.
+    """
+    try:
+        import platform
+        import subprocess
+
+        lines = []
+        lines.append("=== System Information ===")
+        lines.append(f"Hostname: {platform.node()}")
+        lines.append(f"OS: {platform.system()} {platform.release()} ({platform.version()})")
+        lines.append(f"Architecture: {platform.machine()}")
+        lines.append(f"Processor: {platform.processor() or 'Unknown'}")
+
+        # CPU info
+        try:
+            cpu_result = await _run_subprocess(
+                "cat /proc/cpuinfo 2>/dev/null | grep 'model name' | head -1", shell=True, timeout=5
+            )
+            if cpu_result["returncode"] == 0 and cpu_result["stdout"].strip():
+                cpu_model = cpu_result["stdout"].strip().split(":", 1)[1].strip()
+                lines.append(f"CPU Model: {cpu_model}")
+
+            cpu_count_result = await _run_subprocess("nproc", timeout=5)
+            if cpu_count_result["returncode"] == 0:
+                lines.append(f"CPU Cores: {cpu_count_result['stdout'].strip()}")
+        except Exception:
+            pass
+
+        # RAM info
+        try:
+            mem_result = await _run_subprocess("free -h", timeout=5)
+            if mem_result["returncode"] == 0 and mem_result["stdout"].strip():
+                mem_lines = mem_result["stdout"].strip().split("\n")
+                if len(mem_lines) >= 2:
+                    parts = mem_lines[1].split()
+                    lines.append(f"RAM: {parts[1]} total, {parts[2]} used, {parts[3]} available")
+        except Exception:
+            pass
+
+        # Disk info
+        try:
+            disk_result = await _run_subprocess("df -h / 2>/dev/null | tail -1", shell=True, timeout=5)
+            if disk_result["returncode"] == 0 and disk_result["stdout"].strip():
+                parts = disk_result["stdout"].strip().split()
+                if len(parts) >= 5:
+                    lines.append(f"Disk (/): {parts[1]} total, {parts[2]} used, {parts[3]} available ({parts[4]})")
+        except Exception:
+            pass
+
+        # GPU info
+        try:
+            gpu_result = await _run_subprocess("lspci 2>/dev/null | grep -i vga", shell=True, timeout=5)
+            if gpu_result["returncode"] == 0 and gpu_result["stdout"].strip():
+                gpu_line = gpu_result["stdout"].strip()
+                gpu_name = gpu_line.split(":", 1)[1].strip() if ":" in gpu_line else gpu_line
+                lines.append(f"GPU: {gpu_name}")
+        except Exception:
+            pass
+
+        # Battery info
+        try:
+            bat_result = await _run_subprocess(
+                "cat /sys/class/power_supply/BAT*/capacity 2>/dev/null | head -1", shell=True, timeout=5
+            )
+            if bat_result["returncode"] == 0 and bat_result["stdout"].strip():
+                lines.append(f"Battery: {bat_result['stdout'].strip()}%")
+            else:
+                lines.append("Battery: N/A")
+        except Exception:
+            lines.append("Battery: N/A")
+
+        # Network info
+        try:
+            net_result = await _run_subprocess(
+                "ip -4 addr show 2>/dev/null | grep inet | grep -v 127.0.0.1 | awk '{print $2, $NF}' | head -5",
+                shell=True, timeout=5
+            )
+            if net_result["returncode"] == 0 and net_result["stdout"].strip():
+                lines.append(f"Network IPs:\n{net_result['stdout'].strip()}")
+        except Exception:
+            pass
+
+        lines.append(f"\nPython: {sys.version}")
+        lines.append(f"Uptime: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        return f"Error getting system info: {e}"
+
+
+async def desktop_processes(filter_name: str = None, sort_by: str = "cpu", limit: int = 20) -> str:
+    """List running processes with resource usage, optionally filtered and sorted.
+
+    param filter_name (str): — Optional substring to filter process names by.
+    param sort_by (str): — Sort by 'cpu', 'mem', or 'pid'. Default: cpu.
+    param limit (int): — Maximum number of processes to return. Default: 20.
+    """
+    try:
+        sort_col = "%cpu" if sort_by == "cpu" else ("%mem" if sort_by == "mem" else "pid")
+
+        cmd = f"ps aux --sort=-{sort_col}"
+        if filter_name:
+            cmd += f" | grep -i '{filter_name}' | grep -v grep"
+
+        result = await _run_subprocess(cmd, shell=True, timeout=10)
+
+        if result["returncode"] != 0 or not result["stdout"].strip():
+            return "No processes found."
+
+        output_lines = result["stdout"].strip().split("\n")
+        header = output_lines[0]
+        body = output_lines[1:]
+
+        # Format output
+        lines = [f"=== Running Processes (sorted by {sort_by}, limit {limit}) ==="]
+        lines.append(header)
+
+        for line in body[:limit]:
+            parts = line.split(None, 10)
+            if len(parts) >= 11:
+                # Truncate long command names
+                user, pid, cpu, mem, vsz, rss, tty, stat, start, time, cmd = parts[0], parts[1], parts[2], parts[3], parts[4], parts[5], parts[6], parts[7], parts[8], parts[9], parts[10]
+                cmd_display = cmd[:80] + "..." if len(cmd) > 80 else cmd
+                lines.append(f"  PID={pid:>6}  CPU={cpu:>5}%  MEM={mem:>5}%  {cmd_display}")
+            else:
+                lines.append(f"  {line[:100]}")
+
+        if len(body) > limit:
+            lines.append(f"  ... and {len(body) - limit} more processes")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        return f"Error listing processes: {e}"
+
+
+async def desktop_active_window() -> str:
+    """Get information about the currently focused/active window.
+
+    Returns window title, application name, PID, and geometry.
+    """
+    try:
+        # Try xdotool + xprop (Linux X11)
+        result = await _run_subprocess(
+            "xdotool getactivewindow getwindowname getwindowpid 2>/dev/null", shell=True, timeout=5
+        )
+        if result["returncode"] == 0 and result["stdout"].strip():
+            parts = result["stdout"].strip().split("\n")
+            if len(parts) >= 2:
+                title = parts[0]
+                pid = parts[1] if len(parts) > 1 else "N/A"
+
+                # Get geometry
+                geo_result = await _run_subprocess(
+                    "xdotool getactivewindow getwindowgeometry 2>/dev/null", shell=True, timeout=5
+                )
+                geometry = "N/A"
+                if geo_result["returncode"] == 0:
+                    geo_output = geo_result["stdout"].strip()
+                    for line in geo_output.split("\n"):
+                        if "Geometry" in line:
+                            geometry = line.strip().split(":", 1)[1].strip()
+
+                # Try to get app name via WM_CLASS
+                class_result = await _run_subprocess(
+                    "xprop -id $(xdotool getactivewindow) WM_CLASS 2>/dev/null", shell=True, timeout=5
+                )
+                app_name = "N/A"
+                if class_result["returncode"] == 0 and 'WM_CLASS' in class_result["stdout"]:
+                    app_name = class_result["stdout"].strip().split("=", 1)[1].strip().strip('"').split(",")[0].strip().strip('"')
+
+                lines = [
+                    "=== Active Window ===",
+                    f"Title: {title}",
+                    f"Application: {app_name}",
+                    f"PID: {pid}",
+                    f"Geometry: {geometry}",
+                ]
+                return "\n".join(lines)
+
+        # Fallback: try wmctrl
+        wm_result = await _run_subprocess(
+            "wmctrl -a :ACTIVE: -l 2>/dev/null", shell=True, timeout=5
+        )
+        if wm_result["returncode"] == 0:
+            active_result = await _run_subprocess(
+                "wmctrl -l | grep $(xdotool getactivewindow 2>/dev/null) 2>/dev/null", shell=True, timeout=5
+            )
+            if active_result["returncode"] == 0 and active_result["stdout"].strip():
+                return f"Active Window:\n{active_result['stdout'].strip()}"
+
+        return "Error: Could not detect active window. Ensure xdotool is installed (Linux/X11)."
+
+    except Exception as e:
+        return f"Error getting active window: {e}"
+
+
+async def desktop_screenshot(region: str = None, ocr: bool = False) -> str:
+    """Take a screenshot of the screen or a specific region, with optional OCR.
+
+    param region (str): — Screen region to capture as 'x,y,w,h'. Optional, captures full screen if omitted.
+    param ocr (bool): — Whether to perform OCR text extraction on the screenshot. Default: False.
+    """
+    try:
+        import tempfile as _tempfile
+
+        screenshot_path = os.path.join(_tempfile.gettempdir(), f"screenshot_{int(time.time())}.png")
+
+        # Use scrot or import for screenshot capture
+        if region:
+            cmd = f"scrot -a {region} '{screenshot_path}' 2>/dev/null || gnome-screenshot -a -f '{screenshot_path}' 2>/dev/null || import -crop {region} '{screenshot_path}' 2>/dev/null"
+        else:
+            cmd = f"scrot '{screenshot_path}' 2>/dev/null || gnome-screenshot -f '{screenshot_path}' 2>/dev/null || import -window root '{screenshot_path}' 2>/dev/null"
+
+        result = await _run_subprocess(cmd, shell=True, timeout=15)
+
+        if result["returncode"] != 0 or not os.path.exists(screenshot_path):
+            return "Error: Screenshot failed. Ensure scrot, gnome-screenshot, or ImageMagick is installed."
+
+        file_size = os.path.getsize(screenshot_path)
+        lines = [
+            f"Screenshot saved to: {screenshot_path}",
+            f"File size: {_format_size(file_size)}",
+            f"Region: {region if region else 'Full screen'}",
+        ]
+
+        # OCR if requested
+        if ocr:
+            ocr_result = await _run_subprocess(
+                f"tesseract '{screenshot_path}' stdout 2>/dev/null", shell=True, timeout=30
+            )
+            if ocr_result["returncode"] == 0 and ocr_result["stdout"].strip():
+                lines.append("\n--- OCR Text ---")
+                lines.append(ocr_result["stdout"].strip())
+            else:
+                lines.append("\nOCR failed: tesseract not installed or could not extract text.")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        return f"Error taking screenshot: {e}"
+
+
+async def desktop_clipboard() -> str:
+    """Get the current text content of the system clipboard.
+
+    Returns the clipboard text, or an error message if inaccessible.
+    """
+    try:
+        # Try xclip (X11)
+        result = await _run_subprocess(
+            "xclip -selection clipboard -o 2>/dev/null || xsel --clipboard --output 2>/dev/null",
+            shell=True, timeout=5
+        )
+        if result["returncode"] == 0 and result["stdout"].strip():
+            content = result["stdout"]
+            if len(content) > 10000:
+                content = content[:10000] + "\n[... clipboard content truncated, total length: {len(content)} chars]"
+            return f"Clipboard content:\n{content}"
+        elif result["stderr"] and "Error" not in result["stderr"]:
+            return f"Clipboard appears to be empty or contains non-text data."
+
+        return "Error: Could not access clipboard. Ensure xclip or xsel is installed."
+
+    except Exception as e:
+        return f"Error accessing clipboard: {e}"
+
+
+# PC Control Tools
+
+async def desktop_mouse_click(x: int, y: int, button: str = "left") -> str:
+    """Click at a specific position on the screen.
+
+    param x (int): — X coordinate on screen.
+    param y (int): — Y coordinate on screen.
+    param button (str): — Mouse button: 'left', 'right', or 'double'. Default: left.
+    """
+    try:
+        if button not in ("left", "right", "double"):
+            return f"Error: Invalid button '{button}'. Must be 'left', 'right', or 'double'."
+
+        # Move mouse to position then click
+        await _run_subprocess(f"xdotool mousemove {x} {y}", shell=True, timeout=5)
+
+        if button == "left":
+            click_cmd = "xdotool click 1"
+        elif button == "right":
+            click_cmd = "xdotool click 3"
+        else:  # double
+            click_cmd = "xdotool click --repeat 2 --delay 100 1"
+
+        result = await _run_subprocess(click_cmd, shell=True, timeout=5)
+
+        if result["returncode"] == 0:
+            return f"Clicked {button} button at position ({x}, {y})."
+        else:
+            return f"Error: Mouse click failed. Ensure xdotool is installed."
+
+    except Exception as e:
+        return f"Error during mouse click: {e}"
+
+
+async def desktop_type_text(text: str, delay: float = 0.02) -> str:
+    """Type text using the keyboard with an optional delay between keystrokes.
+
+    param text (str): — Text string to type.
+    param delay (float): — Delay in seconds between keystrokes. Default: 0.02.
+    """
+    try:
+        # Escape special characters for xdotool
+        escaped = text.replace("'", "'\\''")
+        result = await _run_subprocess(
+            f"xdotool type --delay {int(delay * 1000)} '{escaped}'",
+            shell=True, timeout=30
+        )
+
+        if result["returncode"] == 0:
+            return f"Typed {len(text)} characters with {delay}s delay."
+        else:
+            return f"Error: Typing failed. Ensure xdotool is installed."
+
+    except Exception as e:
+        return f"Error typing text: {e}"
+
+
+async def desktop_hotkey(keys: str) -> str:
+    """Press a keyboard shortcut/hotkey combination.
+
+    param keys (str): — Key combination to press (e.g., 'ctrl+c', 'alt+tab', 'ctrl+shift+t').
+    """
+    try:
+        # Parse keys and convert to xdotool format
+        key_map = {
+            "ctrl": "ctrl", "control": "ctrl", "alt": "alt", "shift": "shift",
+            "super": "super", "win": "super", "cmd": "super",
+            "tab": "Tab", "enter": "Return", "return": "Return",
+            "space": "space", "escape": "Escape", "esc": "Escape",
+            "backspace": "BackSpace", "delete": "Delete", "del": "Delete",
+            "up": "Up", "down": "Down", "left": "Left", "right": "Right",
+            "home": "Home", "end": "End", "pageup": "Page_Up", "pagedown": "Page_Down",
+            "f1": "F1", "f2": "F2", "f3": "F3", "f4": "F4",
+            "f5": "F5", "f6": "F6", "f7": "F7", "f8": "F8",
+            "f9": "F9", "f10": "F10", "f11": "F11", "f12": "F12",
+        }
+
+        key_parts = [k.strip().lower() for k in keys.split("+")]
+        modifiers = []
+        final_keys = []
+
+        for part in key_parts:
+            mapped = key_map.get(part, part)
+            if mapped in ("ctrl", "alt", "shift", "super"):
+                modifiers.append(mapped)
+            else:
+                final_keys.append(mapped)
+
+        if not final_keys:
+            return f"Error: No key specified in '{keys}'. Provide at least one non-modifier key."
+
+        key_combo = "+".join(modifiers + final_keys)
+        result = await _run_subprocess(f"xdotool key '{key_combo}'", shell=True, timeout=5)
+
+        if result["returncode"] == 0:
+            return f"Hotkey '{keys}' pressed successfully (sent: {key_combo})."
+        else:
+            return f"Error: Hotkey failed. Ensure xdotool is installed."
+
+    except Exception as e:
+        return f"Error pressing hotkey: {e}"
+
+
+async def desktop_launch_app(app_name: str, args: str = None) -> str:
+    """Launch an application by name.
+
+    param app_name (str): — Name or command of the application to launch.
+    param args (str): — Optional arguments to pass to the application. Optional.
+    """
+    try:
+        cmd = app_name
+        if args:
+            cmd = f"{app_name} {args}"
+
+        # Try to launch as background process
+        full_cmd = f"nohup {cmd} > /dev/null 2>&1 &"
+        result = await _run_subprocess(full_cmd, shell=True, timeout=10)
+
+        # Check if the command exists
+        which_result = await _run_subprocess(f"which {app_name}", shell=True, timeout=5)
+        if which_result["returncode"] != 0:
+            return f"Warning: '{app_name}' not found in PATH. Attempted to launch anyway."
+
+        # Give it a moment and check if it's running
+        await __import__("asyncio").sleep(1)
+        check_result = await _run_subprocess(f"pgrep -f '{app_name}'", shell=True, timeout=5)
+
+        if check_result["returncode"] == 0 and check_result["stdout"].strip():
+            pid = check_result["stdout"].strip().split("\n")[0]
+            return f"Launched '{app_name}' (PID: {pid})."
+        else:
+            return f"Attempted to launch '{app_name}'. Process may have exited immediately."
+
+    except Exception as e:
+        return f"Error launching application: {e}"
+
+
+async def desktop_open_url(url: str) -> str:
+    """Open a URL in the default web browser.
+
+    param url (str): — URL to open in the browser.
+    """
+    try:
+        import webbrowser
+
+        # Validate URL
+        if not url.startswith(("http://", "https://", "ftp://")):
+            url = "https://" + url
+
+        webbrowser.open(url)
+        return f"Opened URL in default browser: {url}"
+
+    except Exception as e:
+        return f"Error opening URL: {e}"
+
+
+async def desktop_open_terminal(directory: str = ".", command: str = None) -> str:
+    """Open a terminal emulator in a specific directory with an optional command.
+
+    param directory (str): — Directory to open the terminal in. Default: current directory ('.').
+    param command (str): — Optional command to run in the terminal. Optional.
+    """
+    try:
+        dir_path = str(Path(directory).expanduser().resolve())
+
+        if not os.path.isdir(dir_path):
+            return f"Error: Directory not found: {dir_path}"
+
+        # Try common terminal emulators
+        terminals = [
+            ("gnome-terminal", f"gnome-terminal --working-directory='{dir_path}"),
+            ("konsole", f"konsole --workdir '{dir_path}'"),
+            ("xfce4-terminal", f"xfce4-terminal --working-directory='{dir_path}'"),
+            ("xterm", f"xterm -cd '{dir_path}'"),
+        ]
+
+        if command:
+            terminals = [
+                ("gnome-terminal", f"gnome-terminal --working-directory='{dir_path}' -- bash -c '{command}; exec bash'"),
+                ("konsole", f"konsole --workdir '{dir_path}' -e bash -c '{command}; exec bash'"),
+                ("xfce4-terminal", f"xfce4-terminal --working-directory='{dir_path}' -e \"bash -c '{command}; exec bash'\""),
+                ("xterm", f"xterm -cd '{dir_path}' -e bash -c '{command}; exec bash'"),
+            ]
+
+        launched = False
+        for name, cmd in terminals:
+            which_result = await _run_subprocess(f"which {name}", shell=True, timeout=3)
+            if which_result["returncode"] == 0:
+                await _run_subprocess(f"nohup {cmd} > /dev/null 2>&1 &", shell=True, timeout=5)
+                launched = True
+                term_label = f" running command: {command}" if command else ""
+                return f"Opened {name} in {dir_path}{term_label}."
+
+        return "Error: No supported terminal emulator found. Tried: gnome-terminal, konsole, xfce4-terminal, xterm."
+
+    except Exception as e:
+        return f"Error opening terminal: {e}"
+
+
+# Window Management Tools
+
+async def desktop_list_windows() -> str:
+    """List all open windows with their titles, IDs, and geometry.
+
+    Returns a formatted list of all currently open windows.
+    """
+    try:
+        # Try wmctrl
+        result = await _run_subprocess("wmctrl -l -p 2>/dev/null", shell=True, timeout=5)
+
+        if result["returncode"] == 0 and result["stdout"].strip():
+            lines = ["=== Open Windows ==="]
+            lines.append(f"{'ID':<12} {'PID':>8}  {'Workspace':>8}  Title")
+            lines.append("-" * 70)
+            for line in result["stdout"].strip().split("\n"):
+                parts = line.split(None, 5)
+                if len(parts) >= 6:
+                    win_id = parts[0]
+                    workspace = parts[1]
+                    pid = parts[2]
+                    hostname = parts[3]
+                    title = parts[5]
+                    lines.append(f"{win_id:<12} {pid:>8}  {workspace:>8}  {title[:60]}")
+                else:
+                    lines.append(f"  {line[:70]}")
+            lines.append(f"\nTotal: {len(result['stdout'].strip().split(chr(10)))} windows")
+            return "\n".join(lines)
+
+        # Fallback: xdotool
+        fallback = await _run_subprocess("xdotool search --name '' getwindowname 2>/dev/null", shell=True, timeout=5)
+        if fallback["returncode"] == 0 and fallback["stdout"].strip():
+            lines = ["=== Open Windows ==="]
+            for i, name in enumerate(fallback["stdout"].strip().split("\n"), 1):
+                lines.append(f"  {i}. {name[:80]}")
+            return "\n".join(lines)
+
+        return "Error: Could not list windows. Ensure wmctrl or xdotool is installed."
+
+    except Exception as e:
+        return f"Error listing windows: {e}"
+
+
+async def desktop_focus_window(title: str) -> str:
+    """Focus and bring a window to the foreground by its title.
+
+    param title (str): — Window title substring to search for and focus.
+    """
+    try:
+        # Try wmctrl
+        result = await _run_subprocess(f"wmctrl -a '{title}' 2>/dev/null", shell=True, timeout=5)
+
+        if result["returncode"] == 0:
+            return f"Focused window matching: '{title}'"
+
+        # Fallback: xdotool search
+        search_result = await _run_subprocess(
+            f"xdotool search --name '{title}' windowactivate 2>/dev/null", shell=True, timeout=5
+        )
+        if search_result["returncode"] == 0:
+            return f"Focused window matching: '{title}'"
+
+        return f"Error: No window found matching '{title}'."
+
+    except Exception as e:
+        return f"Error focusing window: {e}"
+
+
+async def desktop_close_window(title: str) -> str:
+    """Close a window by searching for its title.
+
+    param title (str): — Window title substring to search for and close.
+    """
+    try:
+        # Try wmctrl -c (graceful close)
+        result = await _run_subprocess(f"wmctrl -c '{title}' 2>/dev/null", shell=True, timeout=5)
+
+        if result["returncode"] == 0:
+            return f"Closed window matching: '{title}'"
+
+        # Fallback: xdotool search + windowclose
+        search_result = await _run_subprocess(
+            f"xdotool search --name '{title}' windowclose 2>/dev/null", shell=True, timeout=5
+        )
+        if search_result["returncode"] == 0:
+            return f"Closed window matching: '{title}'"
+
+        return f"Error: No window found matching '{title}'."
+
+    except Exception as e:
+        return f"Error closing window: {e}"
+
+
+# Voice Tools
+
+async def desktop_speak(text: str, voice: str = None, rate: float = 1.0) -> str:
+    """Make the assistant speak text aloud using text-to-speech.
+
+    param text (str): — Text to speak aloud.
+    param voice (str): — Optional voice name or language code (e.g., 'en', 'en-US'). Optional.
+    param rate (float): — Speech rate multiplier. 1.0 is normal speed. Default: 1.0.
+    """
+    try:
+        # Clamp rate to sane range
+        rate = max(0.25, min(4.0, rate))
+
+        # Try espeak first (most common on Linux)
+        espeak_cmd = f"espeak -s {int(150 * rate)} -p 50"
+        if voice:
+            espeak_cmd += f" -v '{voice}'"
+        espeak_cmd += f" '{text.replace(chr(39), chr(92) + chr(39))}'"
+
+        result = await _run_subprocess(espeak_cmd, shell=True, timeout=30)
+
+        if result["returncode"] == 0:
+            voice_info = f" (voice: {voice})" if voice else ""
+            return f"Spoke {len(text)} characters at {rate}x speed{voice_info}."
+
+        # Try pico2wave + aplay (alternative TTS)
+        if os.path.exists("/usr/bin/pico2wave"):
+            wav_path = os.path.join(tempfile.gettempdir(), f"tts_{int(time.time())}.wav")
+            lang = voice if voice else "en-US"
+            pico_result = await _run_subprocess(
+                f"pico2wave -l '{lang}' -w '{wav_path}' '{text.replace(chr(39), chr(92) + chr(39))}' && aplay '{wav_path}'",
+                shell=True, timeout=30
+            )
+            if pico_result["returncode"] == 0:
+                return f"Spoke {len(text)} characters using pico2wave."
+            try:
+                os.unlink(wav_path)
+            except OSError:
+                pass
+
+        # Try say (macOS)
+        say_result = await _run_subprocess(f"which say 2>/dev/null", shell=True, timeout=3)
+        if say_result["returncode"] == 0:
+            say_cmd = f"say -r {int(175 * rate)}"
+            if voice:
+                say_cmd += f" -v '{voice}'"
+            say_cmd += f" '{text.replace(chr(39), chr(92) + chr(39))}'"
+            say_result = await _run_subprocess(say_cmd, shell=True, timeout=30)
+            if say_result["returncode"] == 0:
+                return f"Spoke {len(text)} characters using macOS 'say'."
+
+        return "Error: No TTS engine found. Install espeak: sudo apt install espeak"
+
+    except Exception as e:
+        return f"Error speaking text: {e}"
+
+
+# ──────────────────────────────────────────────
 # TOOL REGISTRY
 # ──────────────────────────────────────────────
 
@@ -1785,6 +2412,25 @@ TOOLS_REGISTRY: Dict[str, Callable] = {
     # Git Manager Tools
     "git_smart_commit": git_smart_commit,
     "git_repo_stats": git_repo_stats,
+    # Desktop Tools - System Info
+    "desktop_system_info": desktop_system_info,
+    "desktop_processes": desktop_processes,
+    "desktop_active_window": desktop_active_window,
+    "desktop_screenshot": desktop_screenshot,
+    "desktop_clipboard": desktop_clipboard,
+    # Desktop Tools - PC Control
+    "desktop_mouse_click": desktop_mouse_click,
+    "desktop_type_text": desktop_type_text,
+    "desktop_hotkey": desktop_hotkey,
+    "desktop_launch_app": desktop_launch_app,
+    "desktop_open_url": desktop_open_url,
+    "desktop_open_terminal": desktop_open_terminal,
+    # Desktop Tools - Window Management
+    "desktop_list_windows": desktop_list_windows,
+    "desktop_focus_window": desktop_focus_window,
+    "desktop_close_window": desktop_close_window,
+    # Desktop Tools - Voice
+    "desktop_speak": desktop_speak,
 }
 
 
