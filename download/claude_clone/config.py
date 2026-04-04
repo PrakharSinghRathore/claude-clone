@@ -39,6 +39,52 @@ class Config:
         "provider": "openrouter",
         "base_url": "https://openrouter.ai/api/v1",
         "active_agent": None,
+        "sandbox": {
+            "enabled": True,
+            "max_memory_mb": 512,
+            "default_timeout": 30,
+            "auto_cleanup": True,
+            "allowed_languages": ["python", "javascript", "bash"]
+        },
+        "memory": {
+            "enabled": True,
+            "db_path": "~/.claude_clone/memory.db",
+            "auto_summarize": True,
+            "max_context_tokens": 4000,
+            "retention_days": 90
+        },
+        "analyzer": {
+            "enabled": True,
+            "auto_analyze": False,
+            "snapshot_on_analyze": True,
+            "max_complexity_threshold": 15,
+            "min_quality_score": 60
+        },
+        "security": {
+            "enabled": True,
+            "auto_scan": False,
+            "severity_threshold": "MEDIUM",
+            "ignore_file": ".claudescanignore",
+            "scan_on_save": False
+        },
+        "deployment": {
+            "default_platform": "docker",
+            "history_limit": 50,
+            "auto_health_check": True,
+            "health_check_timeout": 30
+        },
+        "plugins": {
+            "enabled": True,
+            "plugin_dir": "~/.claude_clone/plugins",
+            "auto_reload": True,
+            "hot_reload_interval": 2
+        },
+        "collaboration": {
+            "enabled": False,
+            "server_host": "localhost",
+            "server_port": 8765,
+            "default_room": "default"
+        },
     }
 
     # OpenRouter / Anthropic base URL
@@ -90,6 +136,13 @@ class Config:
         self.active_agent = active_agent
         self.cwd = cwd or os.getcwd()
         self._config_path = DEFAULT_CONFIG_FILE
+        self.sandbox = dict(self.DEFAULTS["sandbox"])
+        self.memory = dict(self.DEFAULTS["memory"])
+        self.analyzer = dict(self.DEFAULTS["analyzer"])
+        self.security = dict(self.DEFAULTS["security"])
+        self.deployment = dict(self.DEFAULTS["deployment"])
+        self.plugins = dict(self.DEFAULTS["plugins"])
+        self.collaboration = dict(self.DEFAULTS["collaboration"])
 
     def _detect_provider(self) -> str:
         """Detect API provider from available keys."""
@@ -167,6 +220,13 @@ class Config:
         if "active_agent" in data:
             config.active_agent = data["active_agent"]
 
+        # Load new feature section configs
+        for section in ("sandbox", "memory", "analyzer", "security", "deployment", "plugins", "collaboration"):
+            if section in data and isinstance(data[section], dict):
+                merged = dict(getattr(config, section))
+                merged.update(data[section])
+                setattr(config, section, merged)
+
         return config
 
     def save(self, path: Optional[str] = None) -> None:
@@ -190,6 +250,13 @@ class Config:
             "provider": self.provider,
             "base_url": self.base_url,
             "active_agent": self.active_agent,
+            "sandbox": self.sandbox,
+            "memory": self.memory,
+            "analyzer": self.analyzer,
+            "security": self.security,
+            "deployment": self.deployment,
+            "plugins": self.plugins,
+            "collaboration": self.collaboration,
         }
 
         # Only save API key if explicitly set (not from env)
@@ -218,6 +285,13 @@ class Config:
             "mcp_servers_count": len(self.mcp_servers),
             "allowed_tools": self.allowed_tools,
             "disabled_tools": self.disabled_tools,
+            "sandbox": self.sandbox,
+            "memory": self.memory,
+            "analyzer": self.analyzer,
+            "security": self.security,
+            "deployment": self.deployment,
+            "plugins": self.plugins,
+            "collaboration": self.collaboration,
         }
 
     def validate(self) -> List[str]:
@@ -276,3 +350,33 @@ class Config:
         }
         input_cost, output_cost = pricing.get(model_key, (3.0, 15.0))
         return (input_tokens / 1_000_000) * input_cost + (output_tokens / 1_000_000) * output_cost
+
+    # ── Feature-section helpers ──────────────────────────────────────
+
+    def get_sandbox_config(self) -> dict:
+        """Return a copy of the sandbox configuration."""
+        return dict(self.sandbox)
+
+    def get_memory_config(self) -> dict:
+        """Return a copy of the memory configuration."""
+        return dict(self.memory)
+
+    def get_analyzer_config(self) -> dict:
+        """Return a copy of the analyzer configuration."""
+        return dict(self.analyzer)
+
+    def get_security_config(self) -> dict:
+        """Return a copy of the security configuration."""
+        return dict(self.security)
+
+    def get_deployment_config(self) -> dict:
+        """Return a copy of the deployment configuration."""
+        return dict(self.deployment)
+
+    def get_plugin_config(self) -> dict:
+        """Return a copy of the plugin configuration."""
+        return dict(self.plugins)
+
+    def get_collaboration_config(self) -> dict:
+        """Return a copy of the collaboration configuration."""
+        return dict(self.collaboration)

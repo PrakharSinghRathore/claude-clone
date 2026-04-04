@@ -245,6 +245,9 @@ class Renderer:
             splash.append("  │", style="bright_blue")
             splash.append("    Agentic Coding Assistant v1.0     ", style="dim")
             splash.append("│\n", style="bright_blue")
+            splash.append("  │", style="bright_blue")
+            splash.append("         40+ Tools & Commands        ", style="bold magenta")
+            splash.append("│\n", style="bright_blue")
             splash.append("  ╰─────────────────────────────────────╯\n", style="bright_blue")
             self.console.print(splash)
         else:
@@ -252,6 +255,7 @@ class Renderer:
   ╭─────────────────────────────────────╮
   │         CLAUDE CODE CLONE            │
   │    Agentic Coding Assistant v1.0     │
+  │         40+ Tools & Commands         │
   ╰─────────────────────────────────────╯
 """)
 

@@ -1146,6 +1146,581 @@ async def which(command: str) -> str:
 
 
 # ──────────────────────────────────────────────
+# SANDBOX TOOLS
+# ──────────────────────────────────────────────
+
+async def sandbox_execute(code: str, language: str = "python", timeout: int = 30) -> str:
+    """Execute code in an isolated sandbox environment.
+
+    param code (str): — Code to execute in the sandbox.
+    param language (str): — Programming language (python, javascript, etc.). Default: python.
+    param timeout (int): — Execution timeout in seconds. Default: 30.
+    """
+    try:
+        from agent.sandbox import SandboxExecutor
+
+        executor = SandboxExecutor()
+        result = await executor.run(code=code, language=language, timeout=timeout)
+        lines = []
+        lines.append(f"Language: {language}")
+        lines.append(f"Execution time: {result.get('execution_time', 'N/A')}")
+        lines.append(f"Memory usage: {result.get('memory_usage', 'N/A')}")
+        lines.append(f"Exit code: {result.get('exit_code', 'N/A')}")
+        if result.get("stdout"):
+            lines.append(f"\n--- stdout ---\n{result['stdout']}")
+        if result.get("stderr"):
+            lines.append(f"\n--- stderr ---\n{result['stderr']}")
+        return "\n".join(lines)
+    except ImportError:
+        return "Error: agent.sandbox module not found. Ensure the sandbox module is available."
+    except Exception as e:
+        return f"Error executing code in sandbox: {e}"
+
+
+async def sandbox_install_package(package: str, language: str = "python") -> str:
+    """Install a package in the sandbox environment.
+
+    param package (str): — Name of the package to install.
+    param language (str): — Target language for the package. Default: python.
+    """
+    try:
+        from agent.sandbox import SandboxExecutor
+
+        executor = SandboxExecutor()
+        result = await executor.install_package(package=package, language=language)
+        if result.get("success"):
+            return f"Successfully installed {package} for {language}.\n{result.get('message', '')}"
+        else:
+            return f"Failed to install {package}: {result.get('error', 'Unknown error')}"
+    except ImportError:
+        return "Error: agent.sandbox module not found. Ensure the sandbox module is available."
+    except Exception as e:
+        return f"Error installing package in sandbox: {e}"
+
+
+async def sandbox_list_files() -> str:
+    """List all files in the sandbox workspace."""
+    try:
+        from agent.sandbox import SandboxExecutor
+
+        executor = SandboxExecutor()
+        files = await executor.list_files()
+        if not files:
+            return "Sandbox workspace is empty."
+        lines = [f"Sandbox workspace files ({len(files)} total):"]
+        for f in files:
+            lines.append(f"  {f}")
+        return "\n".join(lines)
+    except ImportError:
+        return "Error: agent.sandbox module not found. Ensure the sandbox module is available."
+    except Exception as e:
+        return f"Error listing sandbox files: {e}"
+
+
+# ──────────────────────────────────────────────
+# MEMORY TOOLS
+# ──────────────────────────────────────────────
+
+async def memory_search(query: str, limit: int = 10, session_id: str = None) -> str:
+    """Search conversation memory for matching entries.
+
+    param query (str): — Search query to find matching memories.
+    param limit (int): — Maximum number of results. Default: 10.
+    param session_id (str): — Optional session ID to scope the search.
+    """
+    try:
+        from agent.memory import ConversationMemory
+
+        memory = ConversationMemory()
+        results = await memory.search(query=query, limit=limit, session_id=session_id)
+        if not results:
+            return f"No memories found matching '{query}'."
+        lines = [f"Found {len(results)} memory entries matching '{query}':"]
+        for i, entry in enumerate(results, 1):
+            lines.append(f"{i}. [{entry.get('id', 'N/A')}] {entry.get('content', '')[:200]}")
+            if entry.get("tags"):
+                lines.append(f"   Tags: {entry.get('tags')}")
+            if entry.get("timestamp"):
+                lines.append(f"   Created: {entry.get('timestamp')}")
+        return "\n".join(lines)
+    except ImportError:
+        return "Error: agent.memory module not found. Ensure the memory module is available."
+    except Exception as e:
+        return f"Error searching memory: {e}"
+
+
+async def memory_save(content: str, tags: str = None) -> str:
+    """Save content to conversation memory.
+
+    param content (str): — Content to save to memory.
+    param tags (str): — Comma-separated tags for categorization. Optional.
+    """
+    try:
+        from agent.memory import ConversationMemory
+
+        memory = ConversationMemory()
+        tag_list = [t.strip() for t in tags.split(",")] if tags else []
+        entry = await memory.save(content=content, tags=tag_list)
+        entry_id = entry.get("id", "unknown")
+        tag_str = f" with tags [{tags}]" if tags else ""
+        return f"Memory saved successfully (ID: {entry_id}){tag_str}."
+    except ImportError:
+        return "Error: agent.memory module not found. Ensure the memory module is available."
+    except Exception as e:
+        return f"Error saving to memory: {e}"
+
+
+async def memory_list_sessions() -> str:
+    """List all conversation memory sessions."""
+    try:
+        from agent.memory import ConversationMemory
+
+        memory = ConversationMemory()
+        sessions = await memory.list_sessions()
+        if not sessions:
+            return "No memory sessions found."
+        lines = [f"Memory sessions ({len(sessions)} total):"]
+        for session in sessions:
+            lines.append(f"  Session: {session.get('id', 'N/A')}")
+            lines.append(f"    Entries: {session.get('entry_count', 0)}")
+            lines.append(f"    Created: {session.get('created_at', 'N/A')}")
+            lines.append(f"    Updated: {session.get('updated_at', 'N/A')}")
+        return "\n".join(lines)
+    except ImportError:
+        return "Error: agent.memory module not found. Ensure the memory module is available."
+    except Exception as e:
+        return f"Error listing memory sessions: {e}"
+
+
+async def memory_export(session_id: str, filepath: str) -> str:
+    """Export a memory session to a file.
+
+    param session_id (str): — Session ID to export.
+    param filepath (str): — Destination file path for the export.
+    """
+    try:
+        from agent.memory import ConversationMemory
+
+        memory = ConversationMemory()
+        result = await memory.export_session(session_id=session_id, filepath=filepath)
+        if result.get("success"):
+            entry_count = result.get("entry_count", 0)
+            return f"Exported {entry_count} memory entries from session '{session_id}' to {filepath}."
+        else:
+            return f"Failed to export session: {result.get('error', 'Unknown error')}"
+    except ImportError:
+        return "Error: agent.memory module not found. Ensure the memory module is available."
+    except Exception as e:
+        return f"Error exporting memory session: {e}"
+
+
+# ──────────────────────────────────────────────
+# ANALYZER TOOLS
+# ──────────────────────────────────────────────
+
+async def analyze_project(project_path: str = ".") -> str:
+    """Run a full project analysis with quality score and recommendations.
+
+    param project_path (str): — Path to the project to analyze. Default: current directory.
+    """
+    try:
+        from agent.analyzer import ProjectAnalyzer
+
+        analyzer = ProjectAnalyzer()
+        report = await analyzer.analyze(project_path=project_path)
+        lines = []
+        lines.append(f"Project Analysis: {project_path}")
+        lines.append(f"Quality Score: {report.get('quality_score', 'N/A')}/100")
+        lines.append(f"Files analyzed: {report.get('files_analyzed', 0)}")
+        lines.append(f"Total lines: {report.get('total_lines', 0)}")
+        if report.get("complexity_metrics"):
+            lines.append(f"\nComplexity Metrics:")
+            for metric, value in report["complexity_metrics"].items():
+                lines.append(f"  {metric}: {value}")
+        if report.get("recommendations"):
+            lines.append(f"\nRecommendations:")
+            for rec in report["recommendations"]:
+                lines.append(f"  - {rec}")
+        return "\n".join(lines)
+    except ImportError:
+        return "Error: agent.analyzer module not found. Ensure the analyzer module is available."
+    except Exception as e:
+        return f"Error analyzing project: {e}"
+
+
+async def analyze_complexity(filepath: str) -> str:
+    """Get a complexity report for a specific file with per-function scores.
+
+    param filepath (str): — Path to the file to analyze.
+    """
+    try:
+        from agent.analyzer import ProjectAnalyzer
+
+        analyzer = ProjectAnalyzer()
+        report = await analyzer.complexity_report(filepath=filepath)
+        lines = [f"Complexity Report: {filepath}"]
+        lines.append(f"Average complexity: {report.get('average_complexity', 'N/A')}")
+        lines.append(f"Max complexity: {report.get('max_complexity', 'N/A')}")
+        if report.get("functions"):
+            lines.append(f"\nPer-function complexity:")
+            for func in report["functions"]:
+                name = func.get("name", "unknown")
+                score = func.get("complexity", 0)
+                line_no = func.get("line", "?")
+                indicator = "!" if score > 10 else ("*" if score > 5 else " ")
+                lines.append(f"  {indicator} {name} (line {line_no}): complexity {score}")
+        return "\n".join(lines)
+    except ImportError:
+        return "Error: agent.analyzer module not found. Ensure the analyzer module is available."
+    except Exception as e:
+        return f"Error analyzing complexity: {e}"
+
+
+async def analyze_dependencies(project_path: str = ".") -> str:
+    """Get a dependency graph for the project including circular dependency detection.
+
+    param project_path (str): — Path to the project. Default: current directory.
+    """
+    try:
+        from agent.analyzer import ProjectAnalyzer
+
+        analyzer = ProjectAnalyzer()
+        report = await analyzer.dependency_graph(project_path=project_path)
+        lines = [f"Dependency Graph: {project_path}"]
+        lines.append(f"Modules found: {report.get('module_count', 0)}")
+        if report.get("dependencies"):
+            lines.append(f"\nDependencies:")
+            for mod, deps in report["dependencies"].items():
+                lines.append(f"  {mod} -> {', '.join(deps) if deps else '(no deps)'}")
+        if report.get("circular_dependencies"):
+            lines.append(f"\nCircular Dependencies Detected:")
+            for cycle in report["circular_dependencies"]:
+                lines.append(f"  ! {' -> '.join(cycle)}")
+        else:
+            lines.append(f"\nNo circular dependencies found.")
+        return "\n".join(lines)
+    except ImportError:
+        return "Error: agent.analyzer module not found. Ensure the analyzer module is available."
+    except Exception as e:
+        return f"Error analyzing dependencies: {e}"
+
+
+async def analyze_dead_code(project_path: str = ".") -> str:
+    """Find dead code including unused imports, functions, and classes.
+
+    param project_path (str): — Path to the project. Default: current directory.
+    """
+    try:
+        from agent.analyzer import ProjectAnalyzer
+
+        analyzer = ProjectAnalyzer()
+        report = await analyzer.find_dead_code(project_path=project_path)
+        lines = [f"Dead Code Analysis: {project_path}"]
+        if report.get("unused_imports"):
+            lines.append(f"\nUnused Imports ({len(report['unused_imports'])}):")
+            for imp in report["unused_imports"]:
+                lines.append(f"  - {imp.get('name', '')} in {imp.get('file', '')}:{imp.get('line', '')}")
+        else:
+            lines.append(f"\nNo unused imports found.")
+        if report.get("unused_functions"):
+            lines.append(f"\nUnused Functions ({len(report['unused_functions'])}):")
+            for func in report["unused_functions"]:
+                lines.append(f"  - {func.get('name', '')} in {func.get('file', '')}:{func.get('line', '')}")
+        else:
+            lines.append(f"\nNo unused functions found.")
+        if report.get("unused_classes"):
+            lines.append(f"\nUnused Classes ({len(report['unused_classes'])}):")
+            for cls in report["unused_classes"]:
+                lines.append(f"  - {cls.get('name', '')} in {cls.get('file', '')}:{cls.get('line', '')}")
+        else:
+            lines.append(f"\nNo unused classes found.")
+        return "\n".join(lines)
+    except ImportError:
+        return "Error: agent.analyzer module not found. Ensure the analyzer module is available."
+    except Exception as e:
+        return f"Error analyzing dead code: {e}"
+
+
+# ──────────────────────────────────────────────
+# SECURITY TOOLS
+# ──────────────────────────────────────────────
+
+async def security_scan(project_path: str = ".") -> str:
+    """Run a security vulnerability scan on the project.
+
+    param project_path (str): — Path to the project to scan. Default: current directory.
+    """
+    try:
+        from agent.security import SecurityScanner
+
+        scanner = SecurityScanner()
+        report = await scanner.scan(project_path=project_path)
+        lines = [f"Security Scan: {project_path}"]
+        lines.append(f"Total findings: {report.get('total_findings', 0)}")
+        if report.get("findings"):
+            severity_order = ["critical", "high", "medium", "low", "info"]
+            for severity in severity_order:
+                severity_findings = [f for f in report["findings"] if f.get("severity") == severity]
+                if severity_findings:
+                    lines.append(f"\n{severity.upper()} ({len(severity_findings)}):")
+                    for finding in severity_findings:
+                        lines.append(f"  - [{finding.get('rule', '')}] {finding.get('message', '')}")
+                        lines.append(f"    File: {finding.get('file', '')}:{finding.get('line', '')}")
+        else:
+            lines.append("\nNo security findings.")
+        return "\n".join(lines)
+    except ImportError:
+        return "Error: agent.security module not found. Ensure the security module is available."
+    except Exception as e:
+        return f"Error running security scan: {e}"
+
+
+async def security_scan_secrets(project_path: str = ".") -> str:
+    """Scan the project for leaked secrets and credentials.
+
+    param project_path (str): — Path to the project to scan. Default: current directory.
+    """
+    try:
+        from agent.security import SecurityScanner
+
+        scanner = SecurityScanner()
+        report = await scanner.scan_secrets(project_path=project_path)
+        lines = [f"Secrets Scan: {project_path}"]
+        if report.get("secrets"):
+            lines.append(f"\nFound {len(report['secrets'])} leaked secret(s):")
+            for secret in report["secrets"]:
+                lines.append(f"  ! Type: {secret.get('type', 'unknown')}")
+                lines.append(f"    File: {secret.get('file', '')}:{secret.get('line', '')}")
+                lines.append(f"    Match: {secret.get('match', '')[:80]}...")
+                if secret.get("remediation"):
+                    lines.append(f"    Remediation: {secret['remediation']}")
+        else:
+            lines.append("\nNo leaked secrets found.")
+        return "\n".join(lines)
+    except ImportError:
+        return "Error: agent.security module not found. Ensure the security module is available."
+    except Exception as e:
+        return f"Error scanning for secrets: {e}"
+
+
+async def security_scan_dependencies() -> str:
+    """Check project dependencies for known vulnerabilities and CVEs."""
+    try:
+        from agent.security import SecurityScanner
+
+        scanner = SecurityScanner()
+        report = await scanner.scan_dependencies()
+        lines = ["Dependency Vulnerability Scan"]
+        if report.get("vulnerabilities"):
+            lines.append(f"\nFound {len(report['vulnerabilities'])} vulnerable dependencies:")
+            for vuln in report["vulnerabilities"]:
+                lines.append(f"  ! {vuln.get('package', '')} {vuln.get('version', '')}")
+                lines.append(f"    CVE: {vuln.get('cve', 'N/A')}")
+                lines.append(f"    Severity: {vuln.get('severity', 'unknown')}")
+                lines.append(f"    Advisory: {vuln.get('advisory', 'N/A')}")
+        else:
+            lines.append("\nNo known vulnerabilities found in dependencies.")
+        return "\n".join(lines)
+    except ImportError:
+        return "Error: agent.security module not found. Ensure the security module is available."
+    except Exception as e:
+        return f"Error scanning dependencies: {e}"
+
+
+# ──────────────────────────────────────────────
+# DEPLOY TOOLS
+# ──────────────────────────────────────────────
+
+async def deploy_project(platform: str, project_path: str = ".") -> str:
+    """Deploy the project to a specified platform.
+
+    param platform (str): — Target platform (docker, vercel, netlify, lambda, github_pages).
+    param project_path (str): — Path to the project. Default: current directory.
+    """
+    valid_platforms = ["docker", "vercel", "netlify", "lambda", "github_pages"]
+    if platform not in valid_platforms:
+        return f"Error: Invalid platform '{platform}'. Must be one of: {', '.join(valid_platforms)}"
+
+    try:
+        from agent.deploy import DeployEngine
+
+        engine = DeployEngine()
+        result = await engine.deploy(platform=platform, project_path=project_path)
+        lines = [f"Deployment to {platform}:"]
+        if result.get("success"):
+            lines.append(f"  Status: Success")
+            if result.get("url"):
+                lines.append(f"  URL: {result['url']}")
+            if result.get("details"):
+                lines.append(f"  Details: {result['details']}")
+        else:
+            lines.append(f"  Status: Failed")
+            lines.append(f"  Error: {result.get('error', 'Unknown error')}")
+        return "\n".join(lines)
+    except ImportError:
+        return "Error: agent.deploy module not found. Ensure the deploy module is available."
+    except Exception as e:
+        return f"Error deploying project: {e}"
+
+
+async def detect_deploy_platform(project_path: str = ".") -> str:
+    """Auto-detect the best deployment platform for a project.
+
+    param project_path (str): — Path to the project. Default: current directory.
+    """
+    try:
+        from agent.deploy import DeployEngine
+
+        engine = DeployEngine()
+        result = await engine.detect_platform(project_path=project_path)
+        lines = [f"Deployment Platform Detection: {project_path}"]
+        if result.get("platform"):
+            lines.append(f"\nRecommended platform: {result['platform']}")
+            lines.append(f"Reason: {result.get('reason', 'N/A')}")
+            if result.get("alternatives"):
+                lines.append(f"\nAlternative platforms:")
+                for alt in result["alternatives"]:
+                    lines.append(f"  - {alt.get('platform', '')}: {alt.get('reason', '')}")
+        else:
+            lines.append("\nCould not determine a recommended deployment platform.")
+        return "\n".join(lines)
+    except ImportError:
+        return "Error: agent.deploy module not found. Ensure the deploy module is available."
+    except Exception as e:
+        return f"Error detecting deploy platform: {e}"
+
+
+# ──────────────────────────────────────────────
+# DATABASE TOOLS
+# ──────────────────────────────────────────────
+
+async def db_query(query: str, database: str = None) -> str:
+    """Execute a SQL query against a database and return results as a formatted table.
+
+    param query (str): — SQL query to execute.
+    param database (str): — Database connection string. Optional.
+    """
+    try:
+        from agent.database import DatabaseManager
+
+        db = DatabaseManager(connection_string=database)
+        result = await db.execute(query=query)
+        if result.get("error"):
+            return f"Error executing query: {result['error']}"
+        rows = result.get("rows", [])
+        columns = result.get("columns", [])
+        if not rows:
+            return f"Query executed successfully. 0 rows returned."
+        # Format as table
+        lines = []
+        header = " | ".join(str(c) for c in columns)
+        lines.append(header)
+        lines.append("-" * len(header))
+        for row in rows:
+            lines.append(" | ".join(str(v) for v in row))
+        lines.append(f"\n({len(rows)} rows)")
+        return "\n".join(lines)
+    except ImportError:
+        return "Error: agent.database module not found. Ensure the database module is available."
+    except Exception as e:
+        return f"Error executing database query: {e}"
+
+
+async def db_list_tables(database: str = None) -> str:
+    """List all tables in the database with row counts.
+
+    param database (str): — Database connection string. Optional.
+    """
+    try:
+        from agent.database import DatabaseManager
+
+        db = DatabaseManager(connection_string=database)
+        tables = await db.list_tables()
+        if not tables:
+            return "No tables found in the database."
+        lines = [f"Database Tables ({len(tables)}):"]
+        for table in tables:
+            name = table.get("name", "unknown")
+            rows = table.get("row_count", "?")
+            size = table.get("size", "")
+            line = f"  {name} ({rows} rows)"
+            if size:
+                line += f" [{size}]"
+            lines.append(line)
+        return "\n".join(lines)
+    except ImportError:
+        return "Error: agent.database module not found. Ensure the database module is available."
+    except Exception as e:
+        return f"Error listing database tables: {e}"
+
+
+# ──────────────────────────────────────────────
+# GIT MANAGER TOOLS
+# ──────────────────────────────────────────────
+
+async def git_smart_commit(message: str = None, auto_stage: bool = True) -> str:
+    """Create an AI-powered smart commit with an auto-generated or custom message.
+
+    param message (str): — Commit message. If not provided, one will be auto-generated.
+    param auto_stage (bool): — Whether to auto-stage all changes before committing. Default: True.
+    """
+    try:
+        from agent.git_manager import GitManager
+
+        manager = GitManager()
+        result = await manager.smart_commit(message=message, auto_stage=auto_stage)
+        if result.get("success"):
+            lines = [f"Commit successful."]
+            lines.append(f"  Hash: {result.get('hash', 'N/A')}")
+            lines.append(f"  Message: {result.get('message', 'N/A')}")
+            lines.append(f"  Files: {result.get('files_changed', 0)} changed, {result.get('insertions', 0)} insertions, {result.get('deletions', 0)} deletions")
+            if result.get("auto_generated"):
+                lines.append(f"  (Message was auto-generated)")
+            return "\n".join(lines)
+        else:
+            return f"Commit failed: {result.get('error', 'Nothing to commit')}"
+    except ImportError:
+        return "Error: agent.git_manager module not found. Ensure the git_manager module is available."
+    except Exception as e:
+        return f"Error during smart commit: {e}"
+
+
+async def git_repo_stats() -> str:
+    """Get comprehensive repository statistics including contributors and commit frequency."""
+    try:
+        from agent.git_manager import GitManager
+
+        manager = GitManager()
+        stats = await manager.repo_stats()
+        lines = ["Repository Statistics"]
+        if stats.get("total_commits") is not None:
+            lines.append(f"  Total commits: {stats['total_commits']}")
+        if stats.get("total_files") is not None:
+            lines.append(f"  Total files: {stats['total_files']}")
+        if stats.get("total_lines") is not None:
+            lines.append(f"  Total lines of code: {stats['total_lines']}")
+        if stats.get("contributors"):
+            lines.append(f"\nContributors ({len(stats['contributors'])}):")
+            for contributor in stats["contributors"]:
+                name = contributor.get("name", "unknown")
+                commits = contributor.get("commits", 0)
+                lines.append(f"  {name}: {commits} commits")
+        if stats.get("commit_frequency"):
+            lines.append(f"\nCommit Frequency:")
+            for period, count in stats["commit_frequency"].items():
+                lines.append(f"  {period}: {count} commits")
+        if stats.get("line_counts"):
+            lines.append(f"\nLine Counts:")
+            for lang, count in stats["line_counts"].items():
+                lines.append(f"  {lang}: {count} lines")
+        return "\n".join(lines)
+    except ImportError:
+        return "Error: agent.git_manager module not found. Ensure the git_manager module is available."
+    except Exception as e:
+        return f"Error getting repository stats: {e}"
+
+
+# ──────────────────────────────────────────────
 # TOOL REGISTRY
 # ──────────────────────────────────────────────
 
@@ -1183,6 +1758,33 @@ TOOLS_REGISTRY: Dict[str, Callable] = {
     "get_environment": get_environment,
     "install_package": install_package,
     "which": which,
+    # Sandbox Tools
+    "sandbox_execute": sandbox_execute,
+    "sandbox_install_package": sandbox_install_package,
+    "sandbox_list_files": sandbox_list_files,
+    # Memory Tools
+    "memory_search": memory_search,
+    "memory_save": memory_save,
+    "memory_list_sessions": memory_list_sessions,
+    "memory_export": memory_export,
+    # Analyzer Tools
+    "analyze_project": analyze_project,
+    "analyze_complexity": analyze_complexity,
+    "analyze_dependencies": analyze_dependencies,
+    "analyze_dead_code": analyze_dead_code,
+    # Security Tools
+    "security_scan": security_scan,
+    "security_scan_secrets": security_scan_secrets,
+    "security_scan_dependencies": security_scan_dependencies,
+    # Deploy Tools
+    "deploy_project": deploy_project,
+    "detect_deploy_platform": detect_deploy_platform,
+    # Database Tools
+    "db_query": db_query,
+    "db_list_tables": db_list_tables,
+    # Git Manager Tools
+    "git_smart_commit": git_smart_commit,
+    "git_repo_stats": git_repo_stats,
 }
 
 

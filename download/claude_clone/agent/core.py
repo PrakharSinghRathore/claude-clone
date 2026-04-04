@@ -21,6 +21,11 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Union
 
 from agent.tools import TOOLS_REGISTRY, generate_tool_schemas
+from agent.sandbox import SandboxExecutor
+from agent.memory import ConversationMemory, get_memory
+from agent.analyzer import ProjectAnalyzer
+from agent.security import SecurityScanner
+from plugins.loader import PluginManager
 
 
 # ──────────────────────────────────────────────
@@ -146,6 +151,10 @@ You have full access to the user's file system and terminal via tools.
         temperature: float = 1.0,
         cost_callback: Callable = None,
         base_url: str = None,
+        sandbox: bool = True,
+        memory: bool = True,
+        analyzer: bool = True,
+        plugins: bool = True,
     ):
         # API key: OpenRouter first, then Anthropic
         self.api_key = (
@@ -162,12 +171,41 @@ You have full access to the user's file system and terminal via tools.
         self.cost_callback = cost_callback
         self.base_url = base_url  # None = use SDK default (Anthropic direct)
 
+        # Feature flags
+        self.sandbox_enabled = sandbox
+        self.memory_enabled = memory
+        self.analyzer_enabled = analyzer
+        self.plugins_enabled = plugins
+
         self.messages: List[Dict] = []
         self.context_files: List[str] = []
         self._client = None
         self._cancelled = False
         self._total_input_tokens = 0
         self._total_output_tokens = 0
+
+        # Sandbox executor (eager init)
+        self.sandbox_executor = SandboxExecutor() if sandbox else None
+
+        # Conversation memory (eager init)
+        self.conversation_memory = get_memory() if memory else None
+
+        # Project analyzer (lazy init)
+        self.project_analyzer: Optional[ProjectAnalyzer] = None
+        if analyzer:
+            try:
+                self.project_analyzer = ProjectAnalyzer()
+            except Exception:
+                pass  # Gracefully degrade if analyzer unavailable
+
+        # Security scanner (lazy init)
+        self.security_scanner: Optional[SecurityScanner] = None
+
+        # Plugin manager (lazy init)
+        self.plugin_manager: Optional[PluginManager] = None
+
+        # Cached project analysis result
+        self._project_analysis: Optional[dict] = None
 
         # Tool schemas
         self.tool_schemas = generate_tool_schemas(self.tools) if self.tools else []
@@ -262,6 +300,21 @@ You have full access to the user's file system and terminal via tools.
             tool_names = [s["name"] for s in self.tool_schemas]
             parts.append(f"- Available tools: {', '.join(tool_names)}")
 
+        # Recent memory context (placeholder — populated async in run)
+        parts.append("- Memory: available" if self.memory_enabled and self.conversation_memory else "- Memory: disabled")
+
+        # Project analysis summary
+        if self._project_analysis and self._project_analysis.get("status") == "ok":
+            summary = self._project_analysis.get("summary", "")
+            if summary:
+                parts.append(f"- Project analysis: {summary[:300]}")
+
+        # Active plugins list
+        if self.plugin_manager and hasattr(self.plugin_manager, "list_active"):
+            active = self.plugin_manager.list_active()
+            if active:
+                parts.append(f"- Active plugins: {', '.join(active)}")
+
         return "\n".join(parts)
 
     def _get_git_info(self) -> str:
@@ -313,6 +366,70 @@ You have full access to the user's file system and terminal via tools.
 
         return ", ".join(detected) if detected else ""
 
+    # ──────────────────────────────────────────────
+    # New integration methods
+    # ──────────────────────────────────────────────
+
+    async def initialize_plugins(self) -> None:
+        """Initialize the plugin manager, load all plugins, and merge plugin tools."""
+        if not self.plugins_enabled:
+            return
+        try:
+            self.plugin_manager = PluginManager()
+            await self.plugin_manager.load_all()
+            plugin_tools = self.plugin_manager.get_tools()
+            if plugin_tools:
+                self.tools.update(plugin_tools)
+                self.tool_schemas = generate_tool_schemas(self.tools)
+        except Exception as e:
+            # Plugins are non-critical; log and continue
+            pass  # Silently degrade — plugin errors are non-critical
+
+    async def get_memory_context(self, query: str, max_tokens: int = 2000) -> str:
+        """Retrieve relevant memories for context injection."""
+        if not self.memory_enabled or not self.conversation_memory:
+            return ""
+        try:
+            memories = await self.conversation_memory.search(query, limit=5)
+            if not memories:
+                return ""
+            lines = [f"- [memory] {m['content'][:200]}" for m in memories[:5]]
+            return "\n".join(lines)
+        except Exception:
+            return ""
+
+    async def analyze_current_project(self) -> dict:
+        """Analyze the current working directory for project structure and metadata."""
+        if not self.analyzer_enabled or not self.project_analyzer:
+            return {"status": "disabled"}
+        try:
+            self._project_analysis = await self.project_analyzer.analyze(os.getcwd())
+            return self._project_analysis
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+
+    async def security_scan_current(self) -> dict:
+        """Run a security scan on the current directory."""
+        if self.security_scanner is None:
+            try:
+                self.security_scanner = SecurityScanner()
+            except Exception as e:
+                return {"status": "error", "error": f"SecurityScanner init failed: {e}"}
+        try:
+            return await self.security_scanner.scan(os.getcwd())
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+
+    async def execute_in_sandbox(self, code: str, language: str = "python") -> str:
+        """Execute code in an isolated sandbox environment."""
+        if not self.sandbox_enabled or not self.sandbox_executor:
+            return "Error: Sandbox is not enabled."
+        try:
+            result = await self.sandbox_executor.execute(code, language=language)
+            return result.get("stdout", "") if isinstance(result, dict) else str(result)
+        except Exception as e:
+            return f"Sandbox execution error: {e}"
+
     async def _build_context_files_content(self) -> str:
         """Read context files and return their content."""
         parts = []
@@ -342,8 +459,23 @@ You have full access to the user's file system and terminal via tools.
         """
         self._cancelled = False
 
+        # Initialize plugins if enabled (PRE_EXECUTION hook)
+        if self.plugins_enabled and self.plugin_manager is None:
+            await self.initialize_plugins()
+        if self.plugin_manager:
+            try:
+                await self.plugin_manager.execute_hook("PRE_EXECUTION", {"message": user_message})
+            except Exception:
+                pass
+
         # Build system message with context
         context_str = self._build_context_string()
+
+        # Inject recent memory context
+        if self.memory_enabled and self.conversation_memory:
+            memory_ctx = await self.get_memory_context(user_message, max_tokens=2000)
+            if memory_ctx:
+                context_str += f"\n\n## RELEVANT MEMORIES\n{memory_ctx}"
 
         # Add context file contents if any
         if self.context_files:
@@ -359,8 +491,32 @@ You have full access to the user's file system and terminal via tools.
         })
 
         # Run the agentic loop
+        final_usage = {"input_tokens": 0, "output_tokens": 0}
         async for event in self._agentic_loop(system_msg):
+            if isinstance(event, DoneEvent):
+                final_usage = event.usage or {}
             yield event
+
+        # POST_EXECUTION hook
+        if self.plugin_manager:
+            try:
+                await self.plugin_manager.execute_hook("POST_EXECUTION", {
+                    "message": user_message,
+                    "usage": final_usage,
+                })
+            except Exception:
+                pass
+
+        # Save conversation to memory after completion
+        if self.memory_enabled and self.conversation_memory:
+            try:
+                await self.conversation_memory.save_turn(
+                    user_message=user_message,
+                    assistant_messages=[m for m in self.messages if m["role"] == "assistant"],
+                    metadata={"model": self.model, "usage": final_usage},
+                )
+            except Exception:
+                pass  # Memory save is non-critical
 
     async def _agentic_loop(self, system_message: str) -> AsyncIterator[AgentEvent]:
         """
@@ -497,6 +653,17 @@ You have full access to the user's file system and terminal via tools.
 
                     if tool_name in self.tools:
                         try:
+                            # PRE_TOOL_CALL hook
+                            if self.plugin_manager:
+                                try:
+                                    await self.plugin_manager.execute_hook("PRE_TOOL_CALL", {
+                                        "tool_name": tool_name,
+                                        "tool_input": tool_input,
+                                        "tool_id": tool_id,
+                                    })
+                                except Exception:
+                                    pass
+
                             # Execute the tool
                             tool_func = self.tools[tool_name]
                             # Pass dict kwargs directly
@@ -510,6 +677,18 @@ You have full access to the user's file system and terminal via tools.
                             max_result_chars = 30000
                             if len(result_str) > max_result_chars:
                                 result_str = result_str[:max_result_chars] + f"\n\n[... truncated, {len(result_str)} total chars]"
+
+                            # POST_TOOL_CALL hook
+                            if self.plugin_manager:
+                                try:
+                                    await self.plugin_manager.execute_hook("POST_TOOL_CALL", {
+                                        "tool_name": tool_name,
+                                        "tool_input": tool_input,
+                                        "tool_id": tool_id,
+                                        "result": result_str[:1000],
+                                    })
+                                except Exception:
+                                    pass
 
                             yield ToolResultEvent(
                                 tool_name=tool_name,
@@ -534,6 +713,19 @@ You have full access to the user's file system and terminal via tools.
                             })
                         except Exception as e:
                             error_msg = f"Error calling {tool_name}: {e}"
+
+                            # ON_ERROR hook
+                            if self.plugin_manager:
+                                try:
+                                    await self.plugin_manager.execute_hook("ON_ERROR", {
+                                        "tool_name": tool_name,
+                                        "tool_input": tool_input,
+                                        "tool_id": tool_id,
+                                        "error": error_msg,
+                                    })
+                                except Exception:
+                                    pass
+
                             yield ToolResultEvent(tool_name=tool_name, result=error_msg, tool_id=tool_id, is_error=True)
                             tool_results.append({
                                 "type": "tool_result",
@@ -561,6 +753,17 @@ You have full access to the user's file system and terminal via tools.
 
             except Exception as e:
                 error_str = str(e)
+
+                # ON_ERROR hook for agentic loop errors
+                if self.plugin_manager:
+                    try:
+                        await self.plugin_manager.execute_hook("ON_ERROR", {
+                            "error": error_str,
+                            "stage": "agentic_loop",
+                        })
+                    except Exception:
+                        pass
+
                 if "api_key" in error_str.lower() or "authentication" in error_str.lower():
                     yield ErrorEvent(data=f"Authentication error: Check your API key. {e}")
                 elif "rate" in error_str.lower():
