@@ -246,10 +246,11 @@ class Sidebar(ThemedFrame):
         self._tasks_canvas.configure(scrollregion=self._tasks_canvas.bbox("all"))
 
     def _build_quick_actions_section(self):
-        """Build the quick actions section."""
+        """Build the quick actions section with prompt actions and agent team buttons."""
         actions_frame = tk.Frame(self._paned, bg=self.colors["bg"])
-        self._paned.add(actions_frame, height=120, minsize=80)
+        self._paned.add(actions_frame, height=200, minsize=100)
 
+        # ── Quick Prompt Actions ──
         header = tk.Frame(actions_frame, bg=self.colors["bg_secondary"])
         header.pack(fill="x")
 
@@ -261,7 +262,6 @@ class Sidebar(ThemedFrame):
             anchor="w",
         ).pack(side="left", fill="x", pady=4)
 
-        # Quick action buttons
         btn_frame = tk.Frame(actions_frame, bg=self.colors["bg"])
         btn_frame.pack(fill="x", padx=8, pady=4)
 
@@ -292,6 +292,53 @@ class Sidebar(ThemedFrame):
 
         btn_frame.columnconfigure(0, weight=1)
         btn_frame.columnconfigure(1, weight=1)
+
+        # ── Agent Team Selector ──
+        team_header = tk.Frame(actions_frame, bg=self.colors["bg_secondary"])
+        team_header.pack(fill="x")
+
+        tk.Label(
+            team_header, text="  🤖 Agent Team",
+            bg=self.colors["bg_secondary"],
+            fg=self.colors["fg_bright"],
+            font=("Segoe UI", 10, "bold"),
+            anchor="w",
+        ).pack(side="left", fill="x", pady=4)
+
+        agent_frame = tk.Frame(actions_frame, bg=self.colors["bg"])
+        agent_frame.pack(fill="x", padx=8, pady=4)
+
+        agent_buttons = [
+            ("🔍 Search", "search"),
+            ("💻 Code Gen", "codegen"),
+            ("🐛 Debug", "debug"),
+            ("👀 Review", "review"),
+            ("🧪 Test", "test"),
+            ("♻️ Refactor", "refactor"),
+            ("📝 Docs", "docs"),
+            ("🔐 Security", "security"),
+        ]
+
+        for i, (label, agent_id) in enumerate(agent_buttons):
+            row = i // 4
+            col = i % 4
+            btn = tk.Label(
+                agent_frame, text=label,
+                bg=self.colors["accent"],
+                fg="#ffffff",
+                font=("Segoe UI", 7),
+                relief="flat",
+                padx=3, pady=2,
+                cursor="hand2",
+                anchor="w",
+            )
+            btn.grid(row=row, column=col, padx=1, pady=1, sticky="ew")
+            btn.bind("<Button-1>", lambda e, a=agent_id: self._on_quick_action(a))
+            btn.bind("<Enter>", lambda e, b=btn: b.configure(bg=self.colors["accent_hover"]))
+            btn.bind("<Leave>", lambda e, b=btn: b.configure(bg=self.colors["accent"]))
+
+        for c in range(4):
+            agent_frame.columnconfigure(c, weight=1)
 
     def _on_quick_action(self, action_id: str):
         """Handle quick action button click."""

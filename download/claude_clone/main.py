@@ -79,7 +79,7 @@ Configuration:
     parser.add_argument(
         "--version",
         action="version",
-        version="Claude Clone v1.0.0",
+        version="Claude Clone v1.1.0 — Agent Teams + OpenRouter",
     )
 
     parser.add_argument(
@@ -87,6 +87,21 @@ Configuration:
         type=str,
         default=None,
         help="Set working directory",
+    )
+
+    parser.add_argument(
+        "--provider",
+        type=str,
+        choices=["openrouter", "anthropic"],
+        default=None,
+        help="API provider (default: openrouter)",
+    )
+
+    parser.add_argument(
+        "--agent",
+        type=str,
+        default=None,
+        help="Start with a specific agent (e.g., debug, codegen, search)",
     )
 
     args = parser.parse_args()
@@ -107,6 +122,9 @@ Configuration:
     config = Config.from_env()
 
     # Apply command-line overrides
+    if args.provider:
+        config.provider = args.provider
+        config.base_url = config._get_base_url()
     if args.model:
         config.model = args.model
     if args.theme:
@@ -115,11 +133,18 @@ Configuration:
         config.max_tokens = args.max_tokens
     if args.max_iterations:
         config.max_iterations = args.max_iterations
+    if args.agent:
+        config.active_agent = args.agent
 
     # Validate configuration
     warnings = config.validate()
     for warning in warnings:
         print(f"Warning: {warning}")
+
+    print(f"Provider: {config.provider} ({config.base_url})")
+    if config.active_agent:
+        print(f"Agent:    {config.active_agent}")
+    print(f"Model:    {config.model}")
 
     if args.cli:
         # ── Launch CLI Mode ──

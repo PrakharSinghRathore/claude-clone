@@ -24,7 +24,7 @@ class Config:
     """Manages all configuration for the Claude Clone application."""
 
     DEFAULTS = {
-        "model": "claude-sonnet-4-20250514",
+        "model": "anthropic/claude-sonnet-4-20250514",
         "max_tokens": 8192,
         "max_iterations": 10,
         "theme": "dark",
@@ -36,7 +36,14 @@ class Config:
         "system_prompt_overrides": {},
         "context_files": [],
         "cost_warning_threshold": 1.0,
+        "provider": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "active_agent": None,
     }
+
+    # OpenRouter / Anthropic base URL
+    OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+    ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 
     def __init__(
         self,
@@ -54,8 +61,20 @@ class Config:
         context_files: Optional[List[str]] = None,
         cost_warning_threshold: Optional[float] = None,
         cwd: Optional[str] = None,
+        provider: Optional[str] = None,
+        base_url: Optional[str] = None,
+        active_agent: Optional[str] = None,
     ):
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        # API key: check OpenRouter first, then Anthropic
+        self.api_key = (
+            api_key
+            or os.environ.get("OPENROUTER_API_KEY", "")
+            or os.environ.get("ANTHROPIC_API_KEY", "")
+        )
+        # Provider: openrouter or anthropic
+        self.provider = provider or self._detect_provider()
+        # Base URL: derived from provider
+        self.base_url = base_url or self._get_base_url()
         self.model = model or self.DEFAULTS["model"]
         self.max_tokens = max_tokens or self.DEFAULTS["max_tokens"]
         self.max_iterations = max_iterations or self.DEFAULTS["max_iterations"]
@@ -68,17 +87,33 @@ class Config:
         self.system_prompt_overrides = system_prompt_overrides or dict(self.DEFAULTS["system_prompt_overrides"])
         self.context_files = context_files or list(self.DEFAULTS["context_files"])
         self.cost_warning_threshold = cost_warning_threshold or self.DEFAULTS["cost_warning_threshold"]
+        self.active_agent = active_agent
         self.cwd = cwd or os.getcwd()
         self._config_path = DEFAULT_CONFIG_FILE
+
+    def _detect_provider(self) -> str:
+        """Detect API provider from available keys."""
+        if os.environ.get("OPENROUTER_API_KEY"):
+            return "openrouter"
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            return "anthropic"
+        return self.DEFAULTS["provider"]
+
+    def _get_base_url(self) -> str:
+        """Get the API base URL based on provider."""
+        if self.provider == "openrouter":
+            return self.OPENROUTER_BASE_URL
+        return self.ANTHROPIC_BASE_URL
 
     @classmethod
     def from_env(cls) -> "Config":
         """Create a Config instance from environment variables and config file."""
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        api_key = os.environ.get("OPENROUTER_API_KEY", "") or os.environ.get("ANTHROPIC_API_KEY", "")
         model = os.environ.get("CLAUDE_MODEL")
         max_tokens = os.environ.get("CLAUDE_MAX_TOKENS")
         max_iterations = os.environ.get("CLAUDE_MAX_ITERATIONS")
         theme = os.environ.get("CLAUDE_THEME")
+        provider = os.environ.get("API_PROVIDER")
 
         config = cls(
             api_key=api_key or None,
@@ -86,6 +121,7 @@ class Config:
             max_tokens=int(max_tokens) if max_tokens else None,
             max_iterations=int(max_iterations) if max_iterations else None,
             theme=theme or None,
+            provider=provider or None,
         )
 
         if not config.api_key:
@@ -121,6 +157,16 @@ class Config:
         if "api_key" in data and data["api_key"]:
             config.api_key = data["api_key"]
 
+        # Load provider settings
+        if "provider" in data:
+            config.provider = data["provider"]
+        if "base_url" in data:
+            config.base_url = data["base_url"]
+        elif config.provider:
+            config.base_url = config._get_base_url()
+        if "active_agent" in data:
+            config.active_agent = data["active_agent"]
+
         return config
 
     def save(self, path: Optional[str] = None) -> None:
@@ -141,11 +187,14 @@ class Config:
             "system_prompt_overrides": self.system_prompt_overrides,
             "context_files": self.context_files,
             "cost_warning_threshold": self.cost_warning_threshold,
+            "provider": self.provider,
+            "base_url": self.base_url,
+            "active_agent": self.active_agent,
         }
 
         # Only save API key if explicitly set (not from env)
-        api_key_stored = os.environ.get("ANTHROPIC_API_KEY", "")
-        if self.api_key and self.api_key != api_key_stored:
+        api_key_env = os.environ.get("OPENROUTER_API_KEY", "") or os.environ.get("ANTHROPIC_API_KEY", "")
+        if self.api_key and self.api_key != api_key_env:
             data["api_key"] = self.api_key
 
         with open(config_path, "w", encoding="utf-8") as f:
@@ -163,6 +212,9 @@ class Config:
             "temperature": self.temperature,
             "cwd": self.cwd,
             "api_key_set": bool(self.api_key),
+            "provider": self.provider,
+            "base_url": self.base_url,
+            "active_agent": self.active_agent,
             "mcp_servers_count": len(self.mcp_servers),
             "allowed_tools": self.allowed_tools,
             "disabled_tools": self.disabled_tools,
@@ -173,7 +225,10 @@ class Config:
         warnings = []
 
         if not self.api_key:
-            warnings.append("No API key set. Set ANTHROPIC_API_KEY or run: claude-clone config set-api-key")
+            warnings.append(
+                "No API key set. Set OPENROUTER_API_KEY or ANTHROPIC_API_KEY. "
+                "Get an OpenRouter key at: https://openrouter.ai/keys"
+            )
 
         if self.max_tokens < 1 or self.max_tokens > 200000:
             warnings.append(f"max_tokens={self.max_tokens} is outside recommended range [1, 200000]")
@@ -205,6 +260,11 @@ class Config:
 
     def get_cost_estimate(self, input_tokens: int, output_tokens: int) -> float:
         """Estimate cost in USD based on model pricing."""
+        # Strip provider prefix for model name (e.g. "anthropic/claude-sonnet-4" → "claude-sonnet-4")
+        model_key = self.model
+        if "/" in model_key:
+            model_key = model_key.split("/")[-1]
+
         pricing = {
             "claude-opus-4-20250514": (15.0, 75.0),
             "claude-sonnet-4-20250514": (3.0, 15.0),
@@ -214,5 +274,5 @@ class Config:
             "claude-3-sonnet-20240229": (3.0, 15.0),
             "claude-3-haiku-20240307": (0.25, 1.25),
         }
-        input_cost, output_cost = pricing.get(self.model, (3.0, 15.0))
+        input_cost, output_cost = pricing.get(model_key, (3.0, 15.0))
         return (input_tokens / 1_000_000) * input_cost + (output_tokens / 1_000_000) * output_cost

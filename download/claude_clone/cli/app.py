@@ -107,7 +107,8 @@ class SlashCommandCompleter(Completer):
     COMMANDS = [
         "/clear", "/context", "/model", "/tools", "/compact",
         "/export", "/help", "/vim", "/quit", "/exit", "/cost",
-        "/env", "/git", "/undo",
+        "/env", "/git", "/undo", "/team", "/agents", "/agent",
+        "/auto", "/provider",
     ]
 
     def get_completions(self, document, complete_event):
@@ -186,18 +187,48 @@ class ClaudeCodeCLI:
     def __init__(self, config: Config = None):
         self.config = config or Config.from_env()
         self.renderer = Renderer(theme=self.config.theme)
-        self.agent = Agent(
-            api_key=self.config.api_key,
-            model=self.config.model,
-            max_tokens=self.config.max_tokens,
-            max_iterations=self.config.max_iterations,
-            temperature=self.config.temperature,
-            tools=self.config.get_effective_tools(TOOLS_REGISTRY),
-        )
+        self._build_agent()
         self.vim_mode = False
         self._session: Optional[PromptSession] = None
         self._history_path = Path.home() / ".claude_clone" / "history"
         self._running = False
+
+    def _build_agent(self, agent_id: str = None, system_prompt: str = None, temperature: float = None, max_iterations: int = None):
+        """Build (or rebuild) the agent, optionally with a specialized agent config."""
+        from agent.teams import get_agent_config, get_tools_for_agent
+
+        model = self.config.model
+        temp = temperature if temperature is not None else self.config.temperature
+        max_iter = max_iterations or self.config.max_iterations
+        base_url = self.config.base_url
+        sys_prompt = system_prompt or None
+        tools = self.config.get_effective_tools(TOOLS_REGISTRY)
+
+        if agent_id:
+            agent_cfg = get_agent_config(agent_id)
+            if agent_cfg:
+                sys_prompt = sys_prompt or agent_cfg["system_prompt"]
+                temp = temp if temperature is not None else agent_cfg.get("temperature", temp)
+                max_iter = max_iter or agent_cfg.get("max_iterations", max_iter)
+                # Optionally filter tools to agent's recommended set
+                recommended = agent_cfg.get("recommended_tools", [])
+                filtered = {k: v for k, v in tools.items() if k in recommended}
+                if filtered:
+                    tools = filtered
+                self.config.active_agent = agent_id
+            else:
+                self.renderer.print(f"[yellow]Unknown agent: {agent_id}[/yellow]")
+
+        self.agent = Agent(
+            api_key=self.config.api_key,
+            model=model,
+            system_prompt=sys_prompt,
+            tools=tools,
+            max_tokens=self.config.max_tokens,
+            max_iterations=max_iter,
+            temperature=temp,
+            base_url=base_url,
+        )
 
     def _init_session(self):
         """Initialize the prompt_toolkit session."""
@@ -228,9 +259,15 @@ class ClaudeCodeCLI:
 
     def _get_prompt(self):
         """Get the main prompt formatted text."""
+        agent_label = ""
+        if self.config.active_agent:
+            from agent.teams import get_agent_config
+            cfg = get_agent_config(self.config.active_agent)
+            if cfg:
+                agent_label = f"[{cfg['id']}] "
         return FormattedText([
-            ("class:prompt", "claude"),
-            ("", " > "),
+            ("class:prompt", f"claude {agent_label}"),
+            ("", "> "),
         ])
 
     def _continuation_prompt(self, width, line_number, is_soft_wrap):
@@ -245,21 +282,27 @@ class ClaudeCodeCLI:
 
     def _print_help(self):
         """Print help message."""
-        self.renderer.print("""
+        provider = self.config.provider or "openrouter"
+        self.renderer.print(f"""
 [bold yellow]Available Commands:[/bold yellow]
 
-  [bold cyan]/clear[/bold cyan]          Clear conversation history
-  [bold cyan]/context <path>[/bold cyan]  Add a file to context (@ for autocomplete)
-  [bold cyan]/model <name>[/bold cyan]    Switch AI model
-  [bold cyan]/tools[/bold cyan]           List all available tools
-  [bold cyan]/compact[/bold cyan]         Summarize and compress conversation
-  [bold cyan]/export[/bold cyan]          Export conversation to markdown
-  [bold cyan]/cost[/bold cyan]            Show token usage and cost
-  [bold cyan]/env[/bold cyan]             Show environment info
-  [bold cyan]/git[/bold cyan]             Show git status
-  [bold cyan]/vim[/bold cyan]             Toggle vim keybindings
-  [bold cyan]/help[/bold cyan]            Show this help message
-  [bold cyan]/quit[/bold cyan]            Exit the application
+  [bold cyan]/agents[/bold cyan]             List all 20 specialized agents
+  [bold cyan]/agent <id>[/bold cyan]          Switch to a specialized agent (e.g., /agent debug)
+  [bold cyan]/auto <task desc>[/bold cyan]   Auto-select best agent for a task
+  [bold cyan]/team[/bold cyan]               Show current agent team info
+  [bold cyan]/clear[/bold cyan]              Clear conversation history
+  [bold cyan]/context <path>[/bold cyan]      Add a file to context (@ for autocomplete)
+  [bold cyan]/model <name>[/bold cyan]        Switch AI model (OpenRouter format)
+  [bold cyan]/tools[/bold cyan]               List all available tools
+  [bold cyan]/compact[/bold cyan]             Summarize and compress conversation
+  [bold cyan]/export[/bold cyan]              Export conversation to markdown
+  [bold cyan]/cost[/bold cyan]                Show token usage and cost
+  [bold cyan]/env[/bold cyan]                 Show environment info
+  [bold cyan]/git[/bold cyan]                 Show git status
+  [bold cyan]/provider[/bold cyan]           Show current API provider
+  [bold cyan]/vim[/bold cyan]                 Toggle vim keybindings
+  [bold cyan]/help[/bold cyan]                Show this help message
+  [bold cyan]/quit[/bold cyan]                Exit the application
 
 [bold yellow]Keyboard Shortcuts:[/bold yellow]
 
@@ -269,11 +312,14 @@ class ClaudeCodeCLI:
   [bold cyan]Ctrl+D[/bold cyan]         Exit
   [bold cyan]@<path>[/bold cyan]        File path autocomplete
 
-[bold yellow]Tips:[/bold yellow]
+[bold yellow]Agent Teams:[/bold yellow]
 
-  Type @ followed by a path for file autocomplete
-  Use /context to add files for the agent to read
-  Use /model to switch between claude-sonnet-4, claude-opus-4, etc.
+  20 specialized agents: search, codegen, debug, review, test, refactor,
+  docs, security, perf, devops, database, api, frontend, backend,
+  data, architect, git, requirements, deploy, learn
+
+[bold yellow]API Provider:[/bold yellow]  {provider}
+[bold yellow]Base URL:[/bold yellow]       {self.config.base_url}
 """)
 
     def _handle_slash_command(self, command: str) -> bool:
@@ -312,11 +358,98 @@ class ClaudeCodeCLI:
             if not arg:
                 self.renderer.print(f"[dim]Current model: {self.config.model}[/dim]")
                 self.renderer.print("[dim]Usage: /model <model-name>[/dim]")
-                self.renderer.print("[dim]Available: claude-sonnet-4-20250514, claude-opus-4-20250514, claude-3-5-haiku-20241022[/dim]")
+                self.renderer.print("[dim]OpenRouter models (prefix with provider):[/dim]")
+                self.renderer.print("[dim]  anthropic/claude-sonnet-4-20250514[/dim]")
+                self.renderer.print("[dim]  anthropic/claude-opus-4-20250514[/dim]")
+                self.renderer.print("[dim]  anthropic/claude-3-5-haiku-20241022[/dim]")
+                self.renderer.print("[dim]  google/gemini-2.5-pro-preview[/dim]")
+                self.renderer.print("[dim]  meta-llama/llama-4-maverick[/dim]")
+                self.renderer.print("[dim]  openai/gpt-4o[/dim]")
             else:
                 self.config.model = arg
                 self.agent.model = arg
                 self.renderer.print(f"[dim]Switched to model: {arg}[/dim]")
+            return True
+
+        elif cmd == "/agents":
+            from agent.teams import print_agent_table
+            table = print_agent_table()
+            self.renderer.print(f"\n[bold yellow]🤖 Agent Team — 20 Specialized Agents[/bold yellow]\n")
+            self.renderer.print(table)
+            self.renderer.print("\n[dim]Use /agent <id> to switch  |  /auto <task> for auto-selection[/dim]\n")
+            return True
+
+        elif cmd == "/agent":
+            if not arg:
+                from agent.teams import get_agent_config
+                if self.config.active_agent:
+                    cfg = get_agent_config(self.config.active_agent)
+                    if cfg:
+                        self.renderer.print(f"[dim]Current agent: {cfg['emoji']} {cfg['name']} ({cfg['id']})[/dim]")
+                        self.renderer.print(f"[dim]{cfg['description']}[/dim]")
+                else:
+                    self.renderer.print("[dim]No agent selected. Use /agents to see all or /auto <task> to auto-select.[/dim]")
+                self.renderer.print("[dim]Usage: /agent <id>  (e.g., /agent debug, /agent codegen, /agent search)[/dim]")
+            else:
+                agent_id = arg.strip().lower()
+                self.agent.reset()
+                self._build_agent(agent_id=agent_id)
+                from agent.teams import get_agent_config
+                cfg = get_agent_config(agent_id)
+                if cfg:
+                    self.renderer.print(f"[green]✓ Switched to {cfg['emoji']} {cfg['name']}[/green]")
+                    self.renderer.print(f"[dim]  Tools: {', '.join(cfg.get('recommended_tools', []))}[/dim]")
+            return True
+
+        elif cmd == "/auto":
+            if not arg:
+                self.renderer.print("[dim]Usage: /auto <task description>[/dim]")
+                self.renderer.print("[dim]Example: /auto find and fix the bug in login.py[/dim]")
+            else:
+                from agent.teams import build_team_for_task, get_agent_config
+                recommended = build_team_for_task(arg)
+                if recommended:
+                    best = recommended[0]
+                    self.agent.reset()
+                    self._build_agent(agent_id=best["id"])
+                    self.renderer.print(f"[green]✓ Auto-selected {best['emoji']} {best['name']}[/green]")
+                    self.renderer.print(f'[dim]  Reason: Best match for \u201c{arg[:60]}{"..." if len(arg)>60 else ""}\u201d[/dim]')
+                    if len(recommended) > 1:
+                        others = [f"{a['emoji']} {a['name']}" for a in recommended[1:4]]
+                        self.renderer.print(f"[dim]  Also relevant: {', '.join(others)}[/dim]")
+                else:
+                    self.renderer.print("[yellow]No specific agent matched. Using default agent.[/yellow]")
+            return True
+
+        elif cmd == "/team":
+            from agent.teams import get_agent_config, list_agents, get_categories, get_category_label
+            active = self.config.active_agent
+            self.renderer.print(f"\n[bold yellow]🤖 Agent Team Status[/bold yellow]\n")
+            self.renderer.print(f"  [dim]Provider: {self.config.provider}[/dim]")
+            self.renderer.print(f"  [dim]Model:   {self.config.model}[/dim]")
+            self.renderer.print(f"  [dim]Base URL: {self.config.base_url}[/dim]")
+            self.renderer.print(f"  [dim]Active:  {active or 'default'}[/dim]")
+            if active:
+                cfg = get_agent_config(active)
+                if cfg:
+                    self.renderer.print(f"  [dim]Name:    {cfg['name']}[/dim]")
+                    self.renderer.print(f"  [dim]Tools:   {len(cfg.get('recommended_tools', []))} tools[/dim]")
+            self.renderer.print(f"\n  [bold]Team size: {len(list_agents())} agents[/bold]\n")
+            for cat in get_categories():
+                agents = list_agents(category=cat)
+                label = get_category_label(cat)
+                names = ', '.join(f"{a['id']}" for a in agents)
+                self.renderer.print(f"  [dim]{label}: {names}[/dim]")
+            self.renderer.print()
+            return True
+
+        elif cmd == "/provider":
+            self.renderer.print(f"\n  [bold]API Provider:[/bold]  {self.config.provider}")
+            self.renderer.print(f"  [bold]Base URL:[/bold]       {self.config.base_url}")
+            self.renderer.print(f"  [bold]Model:[/bold]           {self.config.model}")
+            self.renderer.print(f"  [bold]API Key:[/bold]        {'Set ✓' if self.config.api_key else 'Not set ✗'}")
+            self.renderer.print(f"  [dim]Get OpenRouter key: https://openrouter.ai/keys[/dim]")
+            self.renderer.print(f"  [dim]Switch provider: export API_PROVIDER=anthropic or openrouter[/dim]\n")
             return True
 
         elif cmd == "/tools":
@@ -454,20 +587,21 @@ class ClaudeCodeCLI:
             self.renderer.print("""
 [bold yellow]⚠ No API Key Found[/bold yellow]
 
-Set your Anthropic API key in one of these ways:
+Set your API key in one of these ways:
 
-  1. [bold cyan]Environment variable:[/bold cyan]
+  1. [bold cyan]OpenRouter (recommended):[/bold cyan]
+     [dim]export OPENROUTER_API_KEY=sk-or-...[/dim]
+     [dim]Get a key at: https://openrouter.ai/keys[/dim]
+
+  2. [bold cyan]Anthropic direct:[/bold cyan]
      [dim]export ANTHROPIC_API_KEY=sk-ant-...[/dim]
 
-  2. [bold cyan]Config file:[/bold cyan]
+  3. [bold cyan]Config file:[/bold cyan]
      [dim]~/.claude_clone/config.json[/dim]
-     [dim]{"api_key": "sk-ant-..."}[/dim]
+     [dim]{"api_key": "sk-or-...", "provider": "openrouter"}[/dim]
 
-  3. [bold cyan].env file:[/bold cyan]
-     [dim]ANTHROPIC_API_KEY=sk-ant-...[/dim]
-
-Get your API key at: [bold blue]https://console.anthropic.com/[/bold blue]
-""")
+Current provider: [bold blue]%s[/bold blue] (%s)
+""" % (self.config.provider, self.config.base_url))
             return
 
         self._init_session()

@@ -112,18 +112,42 @@ class SettingsDialog(tk.Toplevel):
         ).pack(**padding, anchor="w")
 
         models = [
-            "claude-sonnet-4-20250514",
-            "claude-opus-4-20250514",
-            "claude-3-5-haiku-20241022",
-            "claude-3-5-sonnet-20241022",
+            "anthropic/claude-sonnet-4-20250514",
+            "anthropic/claude-opus-4-20250514",
+            "anthropic/claude-3-5-haiku-20241022",
+            "anthropic/claude-3-5-sonnet-20241022",
+            "google/gemini-2.5-pro-preview",
+            "openai/gpt-4o",
+            "meta-llama/llama-4-maverick",
         ]
 
         self._model_var = tk.StringVar(value=self.config.model)
         model_combo = ttk.Combobox(
             self, textvariable=self._model_var, values=models,
-            state="readonly",
         )
         model_combo.pack(padx=16, fill="x", ipady=3)
+
+        # Provider
+        tk.Label(
+            self, text="API Provider", bg=self.colors["bg"],
+            fg=self.colors["fg"], font=("Segoe UI", 10),
+        ).pack(**padding, anchor="w")
+
+        provider_frame = tk.Frame(self, bg=self.colors["bg"])
+        provider_frame.pack(padx=16, anchor="w")
+
+        self._provider_var = tk.StringVar(value=self.config.provider or "openrouter")
+        for prov_name in ["openrouter", "anthropic"]:
+            rb = tk.Radiobutton(
+                provider_frame, text=prov_name.capitalize(),
+                variable=self._provider_var, value=prov_name,
+                bg=self.colors["bg"], fg=self.colors["fg"],
+                selectcolor=self.colors["bg_tertiary"],
+                activebackground=self.colors["bg"],
+                activeforeground=self.colors["fg"],
+                font=("Segoe UI", 10),
+            )
+            rb.pack(side="left", padx=(0, 16))
 
         # Theme
         tk.Label(
@@ -178,11 +202,14 @@ class SettingsDialog(tk.Toplevel):
 
     def _save(self):
         """Save settings."""
+        provider = self._provider_var.get()
         self.result = {
             "model": self._model_var.get(),
             "theme": self._theme_var.get(),
             "max_iterations": int(self._iterations_var.get()),
             "api_key": self._api_key_var.get(),
+            "provider": provider,
+            "base_url": Config.OPENROUTER_BASE_URL if provider == "openrouter" else Config.ANTHROPIC_BASE_URL,
         }
         if self.on_save:
             self.on_save(self.result)
@@ -229,15 +256,36 @@ class CoworkApp:
         self._conversations_dir = Path.home() / ".claude_clone" / "conversations"
         self._conversations_dir.mkdir(parents=True, exist_ok=True)
 
-    def _init_agent(self):
-        """Initialize the agent."""
+    def _init_agent(self, agent_id: str = None):
+        """Initialize the agent, optionally with a specialized agent team config."""
+        from agent.teams import get_agent_config, get_tools_for_agent
+
+        tools = self.config.get_effective_tools(TOOLS_REGISTRY)
+        sys_prompt = None
+        temp = self.config.temperature
+        max_iter = self.config.max_iterations
+
+        if agent_id:
+            agent_cfg = get_agent_config(agent_id)
+            if agent_cfg:
+                sys_prompt = agent_cfg["system_prompt"]
+                temp = agent_cfg.get("temperature", temp)
+                max_iter = agent_cfg.get("max_iterations", max_iter)
+                recommended = agent_cfg.get("recommended_tools", [])
+                filtered = {k: v for k, v in tools.items() if k in recommended}
+                if filtered:
+                    tools = filtered
+                self.config.active_agent = agent_id
+
         self._agent = Agent(
             api_key=self.config.api_key,
             model=self.config.model,
             max_tokens=self.config.max_tokens,
-            max_iterations=self.config.max_iterations,
-            temperature=self.config.temperature,
-            tools=self.config.get_effective_tools(TOOLS_REGISTRY),
+            max_iterations=max_iter,
+            temperature=temp,
+            tools=tools,
+            base_url=self.config.base_url,
+            system_prompt=sys_prompt,
         )
 
     def _build_root(self):
@@ -354,8 +402,14 @@ class CoworkApp:
 
         model_combo = ttk.Combobox(
             header, textvariable=self._model_var,
-            values=["claude-sonnet-4-20250514", "claude-opus-4-20250514", "claude-3-5-haiku-20241022"],
-            width=28, state="readonly",
+            values=[
+                "anthropic/claude-sonnet-4-20250514",
+                "anthropic/claude-opus-4-20250514",
+                "anthropic/claude-3-5-haiku-20241022",
+                "google/gemini-2.5-pro-preview",
+                "openai/gpt-4o",
+            ],
+            width=34,
         )
         model_combo.pack(side="right", padx=(0, 8))
         model_combo.bind("<<ComboboxSelected>>", self._on_model_change)
@@ -520,7 +574,18 @@ class CoworkApp:
         self._set_status(f"Added {path} to context")
 
     def _on_quick_action(self, action_id: str):
-        """Handle quick action button click."""
+        """Handle quick action button click — also supports agent switching."""
+        # Check if it's an agent switch action
+        from agent.teams import get_agent_config
+        agent_cfg = get_agent_config(action_id)
+        if agent_cfg:
+            # Switch to this agent
+            self.config.active_agent = action_id
+            self._init_agent(agent_id=action_id)
+            self._set_status(f"Switched to {agent_cfg['emoji']} {agent_cfg['name']}")
+            return
+
+        # Otherwise, it's a prompt quick action
         prompts = {
             "explain_code": "Please explain the code in the current project. Focus on the main architecture and key components.",
             "fix_bugs": "Please analyze the code for potential bugs, issues, or problems. List each issue with a suggested fix.",
@@ -868,19 +933,23 @@ class CoworkApp:
         self.config.model = settings.get("model", self.config.model)
         self.config.theme = settings.get("theme", self.theme)
         self.config.max_iterations = settings.get("max_iterations", self.config.max_iterations)
+        self.config.provider = settings.get("provider", self.config.provider)
+        self.config.base_url = settings.get("base_url", self.config.base_url)
 
         if settings.get("api_key") and settings["api_key"] != "..." + str(self.config.api_key[:5] if self.config.api_key else ""):
             self.config.api_key = settings["api_key"]
 
         self.config.save()
 
+        # Rebuild agent with new settings
+        self._init_agent(agent_id=self.config.active_agent)
+
         if self._agent:
             self._agent.model = self.config.model
             self._agent.max_iterations = self.config.max_iterations
 
         self._model_var.set(self.config.model)
-
-        self._set_status("Settings saved")
+        self._status_var.set(f"Settings saved — Provider: {self.config.provider}")
 
     def _show_env_info(self):
         """Show environment information in a dialog."""
@@ -890,8 +959,11 @@ class CoworkApp:
             f"OS: {platform.system()} {platform.release()}\n"
             f"CWD: {os.getcwd()}\n"
             f"Model: {self.config.model}\n"
+            f"Provider: {self.config.provider}\n"
+            f"Base URL: {self.config.base_url}\n"
             f"Theme: {self.theme}\n"
             f"API Key: {'Set' if self.config.api_key else 'Not set'}\n"
+            f"Active Agent: {self.config.active_agent or 'default'}\n"
         )
         messagebox.showinfo("Environment", info)
 
@@ -917,12 +989,13 @@ class CoworkApp:
         if not self.config.api_key:
             self._root.after(100, lambda: messagebox.showwarning(
                 "No API Key",
-                "No Anthropic API key found.\n\n"
+                "No API key found.\n\n"
                 "Set it in:\n"
                 "1. Tools → Settings\n"
-                "2. Environment variable: ANTHROPIC_API_KEY\n"
-                "3. Config file: ~/.claude_clone/config.json\n\n"
-                "Get your key at: https://console.anthropic.com/"
+                "2. OpenRouter: export OPENROUTER_API_KEY=sk-or-...\n"
+                "   Get key at: https://openrouter.ai/keys\n"
+                "3. Anthropic: export ANTHROPIC_API_KEY=sk-ant-...\n\n"
+                f"Current provider: {self.config.provider} ({self.config.base_url})"
             ))
 
         self._root.mainloop()

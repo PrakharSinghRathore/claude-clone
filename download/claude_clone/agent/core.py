@@ -138,15 +138,21 @@ You have full access to the user's file system and terminal via tools.
     def __init__(
         self,
         api_key: str = None,
-        model: str = "claude-sonnet-4-20250514",
+        model: str = "anthropic/claude-sonnet-4-20250514",
         system_prompt: str = None,
         tools: Dict[str, Callable] = None,
         max_tokens: int = 8192,
         max_iterations: int = 10,
         temperature: float = 1.0,
         cost_callback: Callable = None,
+        base_url: str = None,
     ):
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        # API key: OpenRouter first, then Anthropic
+        self.api_key = (
+            api_key
+            or os.environ.get("OPENROUTER_API_KEY", "")
+            or os.environ.get("ANTHROPIC_API_KEY", "")
+        )
         self.model = model
         self.system_prompt = system_prompt or self.DEFAULT_SYSTEM_PROMPT
         self.tools = tools or {}
@@ -154,6 +160,7 @@ You have full access to the user's file system and terminal via tools.
         self.max_iterations = max_iterations
         self.temperature = temperature
         self.cost_callback = cost_callback
+        self.base_url = base_url  # None = use SDK default (Anthropic direct)
 
         self.messages: List[Dict] = []
         self.context_files: List[str] = []
@@ -166,15 +173,25 @@ You have full access to the user's file system and terminal via tools.
         self.tool_schemas = generate_tool_schemas(self.tools) if self.tools else []
 
     def _get_client(self):
-        """Lazy-initialize the Anthropic client."""
+        """Lazy-initialize the Anthropic client (supports OpenRouter bypass)."""
         if self._client is None:
             try:
                 import anthropic
-                self._client = anthropic.AsyncAnthropic(api_key=self.api_key)
+                # Build kwargs for the client
+                client_kwargs = {"api_key": self.api_key}
+                if self.base_url:
+                    # OpenRouter (or any compatible provider) — point to custom base_url
+                    client_kwargs["base_url"] = self.base_url
+                    # OpenRouter requires HTTP headers for routing
+                    client_kwargs["default_headers"] = {
+                        "HTTP-Referer": "https://github.com/claude-clone",
+                        "X-Title": "Claude Clone",
+                    }
+                self._client = anthropic.AsyncAnthropic(**client_kwargs)
             except ImportError:
                 raise ImportError("anthropic package is required. Install it with: pip install anthropic")
             except Exception as e:
-                raise RuntimeError(f"Failed to initialize Anthropic client: {e}")
+                raise RuntimeError(f"Failed to initialize API client: {e}")
         return self._client
 
     def reset(self):
@@ -586,6 +603,11 @@ You have full access to the user's file system and terminal via tools.
 
     def estimate_cost(self) -> float:
         """Estimate total cost based on model pricing."""
+        # Strip provider prefix (e.g. "anthropic/claude-sonnet-4" → "claude-sonnet-4")
+        model_key = self.model
+        if "/" in model_key:
+            model_key = model_key.split("/")[-1]
+
         pricing = {
             "claude-opus-4-20250514": (15.0, 75.0),
             "claude-sonnet-4-20250514": (3.0, 15.0),
@@ -595,7 +617,7 @@ You have full access to the user's file system and terminal via tools.
             "claude-3-sonnet-20240229": (3.0, 15.0),
             "claude-3-haiku-20240307": (0.25, 1.25),
         }
-        input_cost, output_cost = pricing.get(self.model, (3.0, 15.0))
+        input_cost, output_cost = pricing.get(model_key, (3.0, 15.0))
         return (
             (self._total_input_tokens / 1_000_000) * input_cost
             + (self._total_output_tokens / 1_000_000) * output_cost
