@@ -130,6 +130,15 @@ class Config:
             "max_extensions_per_cycle": 3,
             "max_optimizations_per_cycle": 5,
         },
+        "knowledge_base": {
+            "enabled": False,
+            "db_path": "~/.claude_clone/knowledge.db",
+            "auto_extract": True,
+            "max_context_tokens": 2000,
+            "auto_prune_days": 90,
+            "import_obsidian": False,
+            "obsidian_vault_path": None,
+        },
     }
 
     # OpenRouter / Anthropic base URL
@@ -190,6 +199,7 @@ class Config:
         self.collaboration = dict(self.DEFAULTS["collaboration"])
         self.desktop = dict(self.DEFAULTS["desktop"])
         self.self_improving = dict(self.DEFAULTS["self_improving"])
+        self.knowledge_base = dict(self.DEFAULTS["knowledge_base"])
 
     def _detect_provider(self) -> str:
         """Detect API provider from available keys."""
@@ -268,7 +278,7 @@ class Config:
             config.active_agent = data["active_agent"]
 
         # Load new feature section configs
-        for section in ("sandbox", "memory", "analyzer", "security", "deployment", "plugins", "collaboration", "desktop"):
+        for section in ("sandbox", "memory", "analyzer", "security", "deployment", "plugins", "collaboration", "desktop", "self_improving", "knowledge_base"):
             if section in data and isinstance(data[section], dict):
                 merged = dict(getattr(config, section))
                 merged.update(data[section])
@@ -305,6 +315,8 @@ class Config:
             "plugins": self.plugins,
             "collaboration": self.collaboration,
             "desktop": self.desktop,
+            "self_improving": self.self_improving,
+            "knowledge_base": self.knowledge_base,
         }
 
         # Only save API key if explicitly set (not from env)
@@ -341,6 +353,8 @@ class Config:
             "plugins": self.plugins,
             "collaboration": self.collaboration,
             "desktop": self.desktop,
+            "self_improving": self.self_improving,
+            "knowledge_base": self.knowledge_base,
         }
 
     def validate(self) -> List[str]:

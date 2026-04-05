@@ -26,6 +26,7 @@ from agent.memory import ConversationMemory, get_memory
 from agent.analyzer import ProjectAnalyzer
 from agent.security import SecurityScanner
 from agent.self_improving import SelfImprovingOrchestrator
+from agent.knowledge_base import KnowledgeBaseOrchestrator, get_knowledge_base, set_knowledge_base
 from plugins.loader import PluginManager
 
 
@@ -157,6 +158,7 @@ You have full access to the user's file system and terminal via tools.
         analyzer: bool = True,
         plugins: bool = True,
         self_improving: bool = False,
+        knowledge_base: bool = False,
         project_root: str = None,
     ):
         # API key: OpenRouter first, then Anthropic
@@ -217,6 +219,16 @@ You have full access to the user's file system and terminal via tools.
                     agent=self,
                     project_root=root,
                 )
+            except Exception:
+                pass  # Non-critical: degrade gracefully
+
+        # Knowledge base (lazy init)
+        self.knowledge_base_enabled = knowledge_base
+        self._kb_orchestrator: Optional[KnowledgeBaseOrchestrator] = None
+        if knowledge_base:
+            try:
+                self._kb_orchestrator = KnowledgeBaseOrchestrator()
+                set_knowledge_base(self._kb_orchestrator)
             except Exception:
                 pass  # Non-critical: degrade gracefully
 
@@ -496,6 +508,17 @@ You have full access to the user's file system and terminal via tools.
             memory_ctx = await self.get_memory_context(user_message, max_tokens=2000)
             if memory_ctx:
                 context_str += f"\n\n## RELEVANT MEMORIES\n{memory_ctx}"
+
+        # Inject knowledge base context
+        if self.knowledge_base_enabled and self._kb_orchestrator:
+            try:
+                if not self._kb_orchestrator.initialized:
+                    await self._kb_orchestrator.initialize()
+                kb_ctx = await self._kb_orchestrator.get_context_for_prompt(user_message, max_tokens=2000)
+                if kb_ctx:
+                    context_str += f"\n\n## KNOWLEDGE BASE\n{kb_ctx}"
+            except Exception:
+                pass  # Non-critical
 
         # Add context file contents if any
         if self.context_files:

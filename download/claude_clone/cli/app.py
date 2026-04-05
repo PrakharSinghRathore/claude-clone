@@ -231,6 +231,7 @@ class ClaudeCodeCLI:
             max_iterations=max_iter,
             temperature=temp,
             base_url=base_url,
+            knowledge_base=getattr(self.config, 'knowledge_base', None) and self.config.knowledge_base.get("enabled", False),
         )
 
     def _init_session(self):

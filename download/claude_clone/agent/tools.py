@@ -18,6 +18,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from agent.knowledge_base import get_knowledge_base
+
 
 # ──────────────────────────────────────────────
 # Tool metadata & schema generation
@@ -2475,6 +2477,195 @@ async def self_improve_feedback(prompt: str, response: str, accepted: bool, task
 
 
 # ──────────────────────────────────────────────
+# KNOWLEDGE BASE TOOLS
+# ──────────────────────────────────────────────
+
+async def kb_add(title: str, content: str, category: str = "concept", tags: str = "", confidence: float = 0.8, importance: float = 0.5) -> str:
+    """Add a knowledge entry to the knowledge base.
+
+    param title (str): — Short title for the knowledge entry.
+    param content (str): — Full content/body of the knowledge.
+    param category (str): — Category: pattern, solution, concept, troubleshooting, reference, snippet, decision, lesson.
+    param tags (str): — Comma-separated tags.
+    param confidence (float): — Confidence level 0.0-1.0.
+    param importance (float): — Importance level 0.0-1.0.
+    """
+    try:
+        kb = get_knowledge_base()
+        if not kb:
+            return "Error: Knowledge base is not enabled. Start with --knowledge-base flag."
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+        entry_id = await kb.add_knowledge(
+            title=title, content=content, category=category,
+            tags=tag_list, confidence=confidence, importance=importance,
+        )
+        return f"Added knowledge entry '{title}' (id: {entry_id}, category: {category})"
+    except Exception as e:
+        return f"Error adding knowledge: {e}"
+
+
+async def kb_search(query: str, category: str = "", tags: str = "", limit: int = 10) -> str:
+    """Search the knowledge base for relevant entries.
+
+    param query (str): — Search query.
+    param category (str): — Optional category filter.
+    param tags (str): — Comma-separated tags to filter by.
+    param limit (int): — Max results to return. Default 10.
+    """
+    try:
+        kb = get_knowledge_base()
+        if not kb:
+            return "Error: Knowledge base is not enabled."
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+        results = await kb.search(query, category=category or None, tags=tag_list, limit=limit)
+        if not results:
+            return f"No results found for '{query}'."
+        lines = [f"Found {len(results)} result(s) for '{query}':\n"]
+        for i, r in enumerate(results, 1):
+            entry = r if hasattr(r, 'entry') else r
+            title = getattr(entry, 'title', 'Untitled')
+            cat = getattr(entry, 'category', '')
+            content_preview = getattr(entry, 'content', '')[:200]
+            score = getattr(r, 'score', 0) if hasattr(r, 'score') else 0
+            lines.append(f"{i}. [{cat}] {title} (score: {score:.2f})")
+            lines.append(f"   {content_preview}...")
+            lines.append("")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error searching knowledge base: {e}"
+
+
+async def kb_stats() -> str:
+    """Get knowledge base statistics and overview."""
+    try:
+        kb = get_knowledge_base()
+        if not kb:
+            return "Error: Knowledge base is not enabled."
+        stats = await kb.get_stats()
+        if isinstance(stats, dict):
+            lines = ["Knowledge Base Statistics:"]
+            for key, value in stats.items():
+                lines.append(f"  {key}: {value}")
+            return "\n".join(lines)
+        return str(stats)
+    except Exception as e:
+        return f"Error getting stats: {e}"
+
+
+async def kb_import(filepath: str, category: str = "reference") -> str:
+    """Import knowledge from a file (Markdown, JSON, or JSONL).
+
+    param filepath (str): — Path to the file to import.
+    param category (str): — Default category for imported entries.
+    """
+    try:
+        kb = get_knowledge_base()
+        if not kb:
+            return "Error: Knowledge base is not enabled."
+        from pathlib import Path as _Path
+        p = _Path(filepath).expanduser()
+        if not p.exists():
+            return f"Error: File not found: {p}"
+        suffix = p.suffix.lower()
+        if suffix in (".md", ".markdown"):
+            result = await kb.import_markdown(str(p), category=category)
+        elif suffix == ".jsonl":
+            result = await kb.import_json(str(p))
+        elif suffix == ".json":
+            result = await kb.import_json(str(p))
+        else:
+            result = await kb.import_markdown(str(p), category=category)
+        if isinstance(result, dict):
+            return f"Import complete: {result.get('total_entries', 0)} entries imported from {filepath}"
+        return f"Import complete: {result}"
+    except Exception as e:
+        return f"Error importing: {e}"
+
+
+async def kb_import_obsidian(vault_path: str) -> str:
+    """Import an entire Obsidian vault into the knowledge base.
+
+    param vault_path (str): — Path to the Obsidian vault directory.
+    """
+    try:
+        kb = get_knowledge_base()
+        if not kb:
+            return "Error: Knowledge base is not enabled."
+        from pathlib import Path as _Path
+        p = _Path(vault_path).expanduser()
+        if not p.is_dir():
+            return f"Error: Not a directory: {p}"
+        result = await kb.import_obsidian_vault(str(p))
+        if isinstance(result, dict):
+            return f"Obsidian vault import: {result.get('total_entries', 0)} entries from {vault_path}"
+        return f"Obsidian vault import complete: {result}"
+    except Exception as e:
+        return f"Error importing Obsidian vault: {e}"
+
+
+async def kb_extract(messages_text: str = "", source_type: str = "conversation") -> str:
+    """Auto-extract knowledge from text content.
+
+    param messages_text (str): — Text content to extract knowledge from.
+    param source_type (str): — Type of content: conversation, code, text.
+    """
+    try:
+        kb = get_knowledge_base()
+        if not kb:
+            return "Error: Knowledge base is not enabled."
+        if not messages_text:
+            return "Error: No content provided to extract from."
+        if source_type == "conversation":
+            # Parse simple message format: "user: ...\nassistant: ..."
+            messages = []
+            for line in messages_text.split("\n"):
+                if line.startswith("user:") or line.startswith("User:"):
+                    messages.append({"role": "user", "content": line.split(":", 1)[1].strip()})
+                elif line.startswith("assistant:") or line.startswith("Assistant:"):
+                    messages.append({"role": "assistant", "content": line.split(":", 1)[1].strip()})
+            result = await kb.auto_extract(messages=messages if messages else None, text=messages_text if not messages else None)
+        else:
+            result = await kb.auto_extract(text=messages_text)
+        if isinstance(result, dict):
+            count = result.get("total_extracted", result.get("entries_stored", 0))
+            return f"Extracted {count} knowledge entries from {source_type}"
+        return f"Extraction complete: {result}"
+    except Exception as e:
+        return f"Error extracting knowledge: {e}"
+
+
+async def kb_graph_visualize(entry_id: str = "") -> str:
+    """Visualize the knowledge graph as ASCII art.
+
+    param entry_id (str): — Optional entry ID to center the graph on. If empty, shows overview.
+    """
+    try:
+        kb = get_knowledge_base()
+        if not kb:
+            return "Error: Knowledge base is not enabled."
+        viz = await kb.visualize_graph(entry_id=entry_id or None)
+        return viz or "Knowledge graph is empty."
+    except Exception as e:
+        return f"Error visualizing graph: {e}"
+
+
+async def kb_context(query: str, max_tokens: int = 2000) -> str:
+    """Get formatted knowledge base context for LLM prompts.
+
+    param query (str): — The query/topic to gather context for.
+    param max_tokens (int): — Approximate token budget. Default 2000.
+    """
+    try:
+        kb = get_knowledge_base()
+        if not kb:
+            return ""
+        ctx = await kb.get_context_for_prompt(query, max_tokens=max_tokens)
+        return ctx or ""
+    except Exception:
+        return ""
+
+
+# ──────────────────────────────────────────────
 # TOOL REGISTRY
 # ──────────────────────────────────────────────
 
@@ -2564,6 +2755,15 @@ TOOLS_REGISTRY: Dict[str, Callable] = {
     "self_improve_status": self_improve_status,
     "self_improve_report": self_improve_report,
     "self_improve_feedback": self_improve_feedback,
+    # Knowledge Base Tools
+    "kb_add": kb_add,
+    "kb_search": kb_search,
+    "kb_stats": kb_stats,
+    "kb_import": kb_import,
+    "kb_import_obsidian": kb_import_obsidian,
+    "kb_extract": kb_extract,
+    "kb_graph_visualize": kb_graph_visualize,
+    "kb_context": kb_context,
 }
 
 

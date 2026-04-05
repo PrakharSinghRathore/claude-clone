@@ -111,6 +111,13 @@ Configuration:
         help="Enable the self-improving system (auto-evaluate, patch, extend, optimize)",
     )
 
+    parser.add_argument(
+        "--knowledge-base",
+        action="store_true",
+        default=False,
+        help="Enable the knowledge base system (persistent knowledge storage, search, extraction)",
+    )
+
     args = parser.parse_args()
 
     # Set working directory if specified
@@ -156,6 +163,8 @@ Configuration:
     print(f"Model:    {config.model}")
     if getattr(config, 'self_improving', None) and config.self_improving.get("enabled"):
         print(f"Self-Improve: enabled")
+    if getattr(config, 'knowledge_base', None) and config.knowledge_base.get("enabled"):
+        print(f"Knowledge Base: enabled")
 
     if args.cli:
         # ── Launch CLI Mode ──
