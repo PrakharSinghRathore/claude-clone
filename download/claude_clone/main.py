@@ -79,7 +79,7 @@ Configuration:
     parser.add_argument(
         "--version",
         action="version",
-        version="Claude Clone v1.2.0 — Self-Improving + Agent Teams + OpenRouter",
+        version="Claude Clone v2.0.0 — Hermes Integration + Self-Improving + Agent Teams + OpenRouter",
     )
 
     parser.add_argument(
@@ -116,6 +116,27 @@ Configuration:
         action="store_true",
         default=False,
         help="Enable the knowledge base system (persistent knowledge storage, search, extraction)",
+    )
+
+    parser.add_argument(
+        "--hermes",
+        action="store_true",
+        default=False,
+        help="Enable Hermes Agent mode (context compression, smart routing, skills, etc.)",
+    )
+
+    parser.add_argument(
+        "--gateway",
+        action="store_true",
+        default=False,
+        help="Start the Hermes Gateway server (multi-platform messaging)",
+    )
+
+    parser.add_argument(
+        "--acp",
+        action="store_true",
+        default=False,
+        help="Start the Hermes ACP server (editor/IDE integration)",
     )
 
     args = parser.parse_args()
@@ -163,8 +184,57 @@ Configuration:
     print(f"Model:    {config.model}")
     if getattr(config, 'self_improving', None) and config.self_improving.get("enabled"):
         print(f"Self-Improve: enabled")
+    if args.hermes:
+        config.hermes = {"enabled": True}
     if getattr(config, 'knowledge_base', None) and config.knowledge_base.get("enabled"):
         print(f"Knowledge Base: enabled")
+    if config.hermes.get("enabled"):
+        print(f"Hermes Agent: enabled")
+
+    # ── Hermes ACP Server Mode ──
+    if args.acp:
+        try:
+            import uvicorn
+            from hermes.acp.server import create_acp_app
+            app = create_acp_app(
+                host=config.hermes_acp.get("host", "0.0.0.0"),
+                port=config.hermes_acp.get("port", 8765),
+                api_key=config.hermes_acp.get("api_key", ""),
+                cors_origins=config.hermes_acp.get("cors_origins", ["*"]),
+            )
+            print(f"Starting Hermes ACP Server on {config.hermes_acp.get('host', '0.0.0.0')}:{config.hermes_acp.get('port', 8765)}")
+            uvicorn.run(app, host=config.hermes_acp.get("host", "0.0.0.0"), port=config.hermes_acp.get("port", 8765))
+        except ImportError as e:
+            print(f"Missing dependency for ACP server: {e}")
+            print("Install with: pip install fastapi uvicorn")
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error starting ACP server: {e}")
+            sys.exit(1)
+        return
+
+    # ── Hermes Gateway Mode ──
+    if args.gateway:
+        try:
+            from hermes.gateway.runner import GatewayRunner
+            from hermes.gateway.config import GatewayConfig
+            gateway_config = GatewayConfig(
+                platforms=config.hermes_gateway.get("platforms", {}),
+                session_timeout=config.hermes_gateway.get("session_timeout", 3600),
+                max_concurrent_sessions=config.hermes_gateway.get("max_concurrent_sessions", 100),
+            )
+            runner = GatewayRunner(gateway_config)
+            print(f"Starting Hermes Gateway with {len(gateway_config.platforms)} platform(s)")
+            import asyncio
+            asyncio.run(runner.start())
+        except ImportError as e:
+            print(f"Missing dependency for gateway: {e}")
+            print("Install with: pip install -r requirements.txt")
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error starting gateway: {e}")
+            sys.exit(1)
+        return
 
     if args.cli:
         # ── Launch CLI Mode ──

@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Union
 
-from agent.tools import TOOLS_REGISTRY, generate_tool_schemas, set_self_improving_orchestrator
+from agent.tools import TOOLS_REGISTRY, generate_tool_schemas, set_self_improving_orchestrator, load_hermes_tools, get_hermes_tool_schemas
 from agent.sandbox import SandboxExecutor
 from agent.memory import ConversationMemory, get_memory
 from agent.analyzer import ProjectAnalyzer
@@ -159,7 +159,9 @@ You have full access to the user's file system and terminal via tools.
         plugins: bool = True,
         self_improving: bool = False,
         knowledge_base: bool = False,
+        hermes_mode: bool = False,
         project_root: str = None,
+        hermes_config: dict = None,
     ):
         # API key: OpenRouter first, then Anthropic
         self.api_key = (
@@ -231,6 +233,74 @@ You have full access to the user's file system and terminal via tools.
                 set_knowledge_base(self._kb_orchestrator)
             except Exception:
                 pass  # Non-critical: degrade gracefully
+
+        # ── Hermes Agent Integration ──
+        self.hermes_mode = hermes_mode
+        self.hermes_config = hermes_config or {}
+        self._hermes_compressor = None
+        self._hermes_prompt_builder = None
+        self._hermes_memory_manager = None
+        self._hermes_smart_router = None
+        self._hermes_credential_pool = None
+        self._hermes_insights = None
+        self._hermes_trajectory = None
+
+        if hermes_mode:
+            try:
+                # Load Hermes context compressor
+                if self.hermes_config.get("context_compression", {}).get("enabled", True):
+                    from hermes.core.context_compressor import ContextCompressor
+                    self._hermes_compressor = ContextCompressor(
+                        strategy=self.hermes_config.get("context_compression", {}).get("strategy", "summarize"),
+                    )
+
+                # Load Hermes prompt builder
+                if self.hermes_config.get("prompt_builder", {}).get("enabled", True):
+                    from hermes.core.prompt_builder import PromptBuilder
+                    self._hermes_prompt_builder = PromptBuilder()
+
+                # Load Hermes memory manager
+                from hermes.core.memory_manager import MemoryManager
+                from hermes.core.builtin_memory import BuiltinMemoryProvider
+                builtin_provider = BuiltinMemoryProvider()
+                self._hermes_memory_manager = MemoryManager(builtin_provider)
+
+                # Load Hermes smart router
+                if self.hermes_config.get("smart_routing", {}).get("enabled", True):
+                    from hermes.core.smart_routing import SmartRouter
+                    self._hermes_smart_router = SmartRouter()
+
+                # Load Hermes credential pool (optional)
+                if self.hermes_config.get("credential_pool", {}).get("enabled", False):
+                    from hermes.core.credential_pool import CredentialPool
+                    self._hermes_credential_pool = CredentialPool(
+                        strategy=self.hermes_config.get("credential_pool", {}).get("strategy", "round_robin"),
+                    )
+
+                # Load Hermes insights
+                if self.hermes_config.get("insights", {}).get("enabled", True):
+                    from hermes.core.insights import InsightsManager
+                    self._hermes_insights = InsightsManager()
+
+                # Load Hermes trajectory recorder (optional)
+                if self.hermes_config.get("trajectory", {}).get("enabled", False):
+                    from hermes.core.trajectory import TrajectoryRecorder
+                    self._hermes_trajectory = TrajectoryRecorder(
+                        storage_path=self.hermes_config.get("trajectory", {}).get("storage_path"),
+                    )
+
+                # Merge Hermes tools into the existing tool registry
+                hermes_tools = load_hermes_tools()
+                if hermes_tools:
+                    self.tools.update(hermes_tools)
+                    self.tool_schemas = generate_tool_schemas(self.tools)
+
+            except ImportError as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Hermes mode requested but import failed: {e}")
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Hermes initialization failed: {e}")
 
         # Cached project analysis result
         self._project_analysis: Optional[dict] = None
@@ -532,6 +602,20 @@ You have full access to the user's file system and terminal via tools.
             "role": "user",
             "content": user_message,
         })
+
+        # ── Hermes: Context compression if history is too long ──
+        if self.hermes_mode and self._hermes_compressor and len(self.messages) > 10:
+            try:
+                self.messages = await self._hermes_compressor.compress(self.messages, self.model)
+            except Exception:
+                pass  # Non-critical: proceed with uncompressed history
+
+        # ── Hermes: Record trajectory if enabled ──
+        if self.hermes_mode and self._hermes_trajectory:
+            try:
+                self._hermes_trajectory.record_user_message(user_message)
+            except Exception:
+                pass
 
         # Run the agentic loop
         final_usage = {"input_tokens": 0, "output_tokens": 0}

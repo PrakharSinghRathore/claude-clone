@@ -139,6 +139,75 @@ class Config:
             "import_obsidian": False,
             "obsidian_vault_path": None,
         },
+        # ── Hermes Agent Integration ──
+        "hermes": {
+            "enabled": True,
+            "version": "0.7.0",
+            "context_compression": {
+                "enabled": True,
+                "max_context_tokens": 180000,
+                "compression_threshold": 0.8,
+                "strategy": "summarize",
+            },
+            "prompt_builder": {
+                "enabled": True,
+                "sections": ["identity", "context", "memory", "skills", "tools"],
+            },
+            "smart_routing": {
+                "enabled": True,
+                "cost_aware": True,
+                "latency_aware": True,
+            },
+            "credential_pool": {
+                "enabled": False,
+                "strategy": "round_robin",
+                "keys": [],
+            },
+            "trajectory": {
+                "enabled": False,
+                "storage_path": "~/.claude_clone/trajectories/",
+            },
+            "insights": {
+                "enabled": True,
+                "retention_days": 30,
+            },
+        },
+        "hermes_tools": {
+            "enabled": True,
+            "auto_discover": True,
+            "disabled_toolsets": [],
+            "disabled_tools": [],
+        },
+        "hermes_gateway": {
+            "enabled": False,
+            "platforms": {},
+            "session_timeout": 3600,
+            "max_concurrent_sessions": 100,
+            "webhook_secret": "",
+        },
+        "hermes_cron": {
+            "enabled": False,
+            "storage_path": "~/.claude_clone/cron/",
+            "tick_interval": 60,
+            "max_concurrent_jobs": 5,
+        },
+        "hermes_memory_plugins": {
+            "enabled": False,
+            "active_plugin": None,
+            "plugin_dir": "~/.claude_clone/memory_plugins/",
+        },
+        "hermes_skills": {
+            "enabled": True,
+            "builtin_dir": "hermes/skills/builtins/",
+            "custom_dir": "~/.claude_clone/skills/",
+        },
+        "hermes_acp": {
+            "enabled": False,
+            "host": "0.0.0.0",
+            "port": 8765,
+            "api_key": "",
+            "cors_origins": ["*"],
+        },
     }
 
     # OpenRouter / Anthropic base URL
@@ -200,6 +269,14 @@ class Config:
         self.desktop = dict(self.DEFAULTS["desktop"])
         self.self_improving = dict(self.DEFAULTS["self_improving"])
         self.knowledge_base = dict(self.DEFAULTS["knowledge_base"])
+        # Hermes integration sections
+        self.hermes = dict(self.DEFAULTS["hermes"])
+        self.hermes_tools = dict(self.DEFAULTS["hermes_tools"])
+        self.hermes_gateway = dict(self.DEFAULTS["hermes_gateway"])
+        self.hermes_cron = dict(self.DEFAULTS["hermes_cron"])
+        self.hermes_memory_plugins = dict(self.DEFAULTS["hermes_memory_plugins"])
+        self.hermes_skills = dict(self.DEFAULTS["hermes_skills"])
+        self.hermes_acp = dict(self.DEFAULTS["hermes_acp"])
 
     def _detect_provider(self) -> str:
         """Detect API provider from available keys."""
@@ -278,7 +355,7 @@ class Config:
             config.active_agent = data["active_agent"]
 
         # Load new feature section configs
-        for section in ("sandbox", "memory", "analyzer", "security", "deployment", "plugins", "collaboration", "desktop", "self_improving", "knowledge_base"):
+        for section in ("sandbox", "memory", "analyzer", "security", "deployment", "plugins", "collaboration", "desktop", "self_improving", "knowledge_base", "hermes", "hermes_tools", "hermes_gateway", "hermes_cron", "hermes_memory_plugins", "hermes_skills", "hermes_acp"):
             if section in data and isinstance(data[section], dict):
                 merged = dict(getattr(config, section))
                 merged.update(data[section])
@@ -317,6 +394,13 @@ class Config:
             "desktop": self.desktop,
             "self_improving": self.self_improving,
             "knowledge_base": self.knowledge_base,
+            "hermes": self.hermes,
+            "hermes_tools": self.hermes_tools,
+            "hermes_gateway": self.hermes_gateway,
+            "hermes_cron": self.hermes_cron,
+            "hermes_memory_plugins": self.hermes_memory_plugins,
+            "hermes_skills": self.hermes_skills,
+            "hermes_acp": self.hermes_acp,
         }
 
         # Only save API key if explicitly set (not from env)

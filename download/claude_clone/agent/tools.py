@@ -2841,3 +2841,71 @@ def _is_path_safe(path: Path) -> bool:
         return True  # Allow all paths — the user can configure restrictions
     except (OSError, ValueError):
         return False
+
+
+# ──────────────────────────────────────────────
+# HERMES TOOLS INTEGRATION
+# ──────────────────────────────────────────────
+
+def load_hermes_tools(config=None) -> dict:
+    """Discover and load all Hermes tools from the hermes/tools/ registry.
+
+    Returns a dict of {tool_name: async_func} compatible with the existing
+    TOOLS_REGISTRY format. Respects config.hermes_tools settings.
+
+    Args:
+        config: Optional Config instance. If provided, respects disabled_toolsets
+                and disabled_tools settings.
+
+    Returns:
+        Dict of tool_name → async function.
+    """
+    hermes_tools = {}
+    try:
+        from hermes.tools import discover_tools
+        all_tools = discover_tools()
+        hermes_tools.update(all_tools)
+    except ImportError:
+        return hermes_tools
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Failed to load Hermes tools: {e}")
+        return hermes_tools
+
+    # Apply config filters
+    if config and hasattr(config, "hermes_tools"):
+        disabled_toolsets = config.hermes_tools.get("disabled_toolsets", [])
+        disabled_tools = config.hermes_tools.get("disabled_tools", [])
+
+        if disabled_toolsets or disabled_tools:
+            from hermes.tools.registry import ToolRegistry
+            registry = ToolRegistry.instance()
+            filtered = {}
+            for name, func in hermes_tools.items():
+                tool_info = registry.get_tool(name)
+                if tool_info and tool_info.toolset in disabled_toolsets:
+                    continue
+                if name in disabled_tools:
+                    continue
+                filtered[name] = func
+            hermes_tools = filtered
+
+    return hermes_tools
+
+
+def get_hermes_tool_schemas(config=None) -> list:
+    """Get Anthropic-format tool schemas for all Hermes tools.
+
+    Args:
+        config: Optional Config instance for filtering.
+
+    Returns:
+        List of tool schema dicts compatible with Anthropic's tool_use format.
+    """
+    try:
+        from hermes.tools.registry import ToolRegistry
+        registry = ToolRegistry.instance()
+        schemas = registry.get_all_schemas()
+    except Exception:
+        return []
+    return schemas
