@@ -79,7 +79,7 @@ Configuration:
     parser.add_argument(
         "--version",
         action="version",
-        version="Claude Clone v1.1.0 — Agent Teams + OpenRouter",
+        version="Claude Clone v1.2.0 — Self-Improving + Agent Teams + OpenRouter",
     )
 
     parser.add_argument(
@@ -102,6 +102,13 @@ Configuration:
         type=str,
         default=None,
         help="Start with a specific agent (e.g., debug, codegen, search)",
+    )
+
+    parser.add_argument(
+        "--self-improve",
+        action="store_true",
+        default=False,
+        help="Enable the self-improving system (auto-evaluate, patch, extend, optimize)",
     )
 
     args = parser.parse_args()
@@ -135,6 +142,8 @@ Configuration:
         config.max_iterations = args.max_iterations
     if args.agent:
         config.active_agent = args.agent
+    if args.self_improve:
+        config.self_improving = {"enabled": True}
 
     # Validate configuration
     warnings = config.validate()
@@ -145,6 +154,8 @@ Configuration:
     if config.active_agent:
         print(f"Agent:    {config.active_agent}")
     print(f"Model:    {config.model}")
+    if getattr(config, 'self_improving', None) and config.self_improving.get("enabled"):
+        print(f"Self-Improve: enabled")
 
     if args.cli:
         # ── Launch CLI Mode ──

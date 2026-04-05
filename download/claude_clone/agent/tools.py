@@ -2348,6 +2348,133 @@ async def desktop_speak(text: str, voice: str = None, rate: float = 1.0) -> str:
 
 
 # ──────────────────────────────────────────────
+# SELF-IMPROVEMENT TOOLS
+# ──────────────────────────────────────────────
+
+# Global reference set by Agent — the orchestrator needs a reference to the agent
+_SELF_IMPROVING_ORCH: Any = None
+
+
+def set_self_improving_orchestrator(orchestrator: Any) -> None:
+    """Set the global self-improving orchestrator reference."""
+    global _SELF_IMPROVING_ORCH
+    _SELF_IMPROVING_ORCH = orchestrator
+
+
+def get_self_improving_orchestrator() -> Any:
+    """Get the global self-improving orchestrator reference."""
+    return _SELF_IMPROVING_ORCH
+
+
+async def self_improve_scan() -> str:
+    """Run a quick self-improvement scan (evaluation only, no modifications).
+
+    Returns quality score, top issues, and improvement suggestions.
+    """
+    orch = get_self_improving_orchestrator()
+    if not orch:
+        return "Error: Self-improving system not initialized. Start with --self-improve flag."
+    try:
+        result = await orch.quick_scan()
+        return result
+    except Exception as e:
+        return f"Self-improve scan error: {e}"
+
+
+async def self_improve_run() -> str:
+    """Run a full self-improvement cycle (evaluate → learn → patch → extend → optimize).
+
+    Applies safety guardrails. May modify source code. Requires --self-improve flag.
+    """
+    orch = get_self_improving_orchestrator()
+    if not orch:
+        return "Error: Self-improving system not initialized. Start with --self-improve flag."
+    try:
+        import json
+        cycle = await orch.run_full_cycle()
+        report = {
+            "cycle_id": cycle.cycle_id,
+            "duration": f"{cycle.duration:.1f}s",
+            "phases": cycle.phases_completed,
+            "quality_before": f"{cycle.evaluation_score_before:.2f} ({cycle.evaluation_grade_before})",
+            "quality_after": f"{cycle.evaluation_score_after:.2f} ({cycle.evaluation_grade_after})",
+            "patches": f"{cycle.patches_applied} applied, {cycle.patches_blocked} blocked",
+            "extensions": f"{cycle.extensions_integrated}/{cycle.extensions_generated} integrated",
+            "optimizations": f"{cycle.optimizations_applied}/{cycle.optimizations_attempted} applied",
+            "evolution": f"{cycle.evolution_score_before:.3f} → {cycle.evolution_score_after:.3f}",
+            "errors": cycle.errors or [],
+        }
+        return json.dumps(report, indent=2)
+    except Exception as e:
+        return f"Self-improve run error: {e}"
+
+
+async def self_improve_status() -> str:
+    """Get the current status of the self-improving system.
+
+    Shows initialization state, scores, generation, and daily change limits.
+    """
+    orch = get_self_improving_orchestrator()
+    if not orch:
+        return "Self-improving system: not initialized"
+    try:
+        import json
+        status = await orch.get_status()
+        return json.dumps({
+            "initialized": status.initialized,
+            "evolution_score": f"{status.evolution_score:.3f}",
+            "generation": status.generation,
+            "files_analyzed": status.total_files_analyzed,
+            "issues_found": status.total_issues_found,
+            "patches_applied": status.total_patches_applied,
+            "tools_added": status.total_tools_added,
+            "optimizations": status.total_optimizations,
+            "daily_changes_remaining": status.daily_changes_remaining,
+            "last_cycle": status.last_cycle_time,
+        }, indent=2)
+    except Exception as e:
+        return f"Self-improve status error: {e}"
+
+
+async def self_improve_report() -> str:
+    """Generate a comprehensive self-improvement report.
+
+    Includes evolution timeline, safety stats, evaluation, learning, and optimization data.
+    """
+    orch = get_self_improving_orchestrator()
+    if not orch:
+        return "Error: Self-improving system not initialized. Start with --self-improve flag."
+    try:
+        report = await orch.generate_full_report()
+        # Truncate very long reports
+        if len(report) > 15000:
+            report = report[:15000] + "\n\n[... report truncated]"
+        return report
+    except Exception as e:
+        return f"Self-improve report error: {e}"
+
+
+async def self_improve_feedback(prompt: str, response: str, accepted: bool, task_type: str = "general") -> str:
+    """Record user feedback for self-learning.
+
+    param prompt (str): — The user's original prompt.
+    param response (str): — The agent's response.
+    param accepted (bool): — Whether the user accepted the response.
+    param task_type (str): — Type of task (general, coding, debugging, etc.).
+    """
+    orch = get_self_improving_orchestrator()
+    if not orch:
+        return "Error: Self-improving system not initialized."
+    try:
+        result = await orch.record_feedback(
+            prompt=prompt, response=response, accepted=accepted, task_type=task_type
+        )
+        return result
+    except Exception as e:
+        return f"Self-improve feedback error: {e}"
+
+
+# ──────────────────────────────────────────────
 # TOOL REGISTRY
 # ──────────────────────────────────────────────
 
@@ -2431,6 +2558,12 @@ TOOLS_REGISTRY: Dict[str, Callable] = {
     "desktop_close_window": desktop_close_window,
     # Desktop Tools - Voice
     "desktop_speak": desktop_speak,
+    # Self-Improvement Tools
+    "self_improve_scan": self_improve_scan,
+    "self_improve_run": self_improve_run,
+    "self_improve_status": self_improve_status,
+    "self_improve_report": self_improve_report,
+    "self_improve_feedback": self_improve_feedback,
 }
 
 

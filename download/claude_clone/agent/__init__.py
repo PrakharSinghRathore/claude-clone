@@ -10,6 +10,7 @@ from agent.session_recorder import SessionRecorder, SessionEvent, Session
 from agent.plan_mode import PlanMode, PlanStep, ExecutionPlan
 from agent.task_queue import TaskQueue, TaskPriority, TaskStatus, BackgroundTask
 from agent.feedback import FeedbackCollector, FeedbackRating, FeedbackEntry
+from agent.self_improving import SelfImprovingOrchestrator
 
 __all__ = [
     "Agent", "AgentEvent", "ThinkingEvent", "TextEvent",
@@ -21,4 +22,5 @@ __all__ = [
     "PlanMode", "PlanStep", "ExecutionPlan",
     "TaskQueue", "TaskPriority", "TaskStatus", "BackgroundTask",
     "FeedbackCollector", "FeedbackRating", "FeedbackEntry",
+    "SelfImprovingOrchestrator",
 ]

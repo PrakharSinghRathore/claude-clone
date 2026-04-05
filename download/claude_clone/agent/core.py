@@ -20,11 +20,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Union
 
-from agent.tools import TOOLS_REGISTRY, generate_tool_schemas
+from agent.tools import TOOLS_REGISTRY, generate_tool_schemas, set_self_improving_orchestrator
 from agent.sandbox import SandboxExecutor
 from agent.memory import ConversationMemory, get_memory
 from agent.analyzer import ProjectAnalyzer
 from agent.security import SecurityScanner
+from agent.self_improving import SelfImprovingOrchestrator
 from plugins.loader import PluginManager
 
 
@@ -155,6 +156,8 @@ You have full access to the user's file system and terminal via tools.
         memory: bool = True,
         analyzer: bool = True,
         plugins: bool = True,
+        self_improving: bool = False,
+        project_root: str = None,
     ):
         # API key: OpenRouter first, then Anthropic
         self.api_key = (
@@ -176,6 +179,7 @@ You have full access to the user's file system and terminal via tools.
         self.memory_enabled = memory
         self.analyzer_enabled = analyzer
         self.plugins_enabled = plugins
+        self.self_improving_enabled = self_improving
 
         self.messages: List[Dict] = []
         self.context_files: List[str] = []
@@ -204,11 +208,27 @@ You have full access to the user's file system and terminal via tools.
         # Plugin manager (lazy init)
         self.plugin_manager: Optional[PluginManager] = None
 
+        # Self-improving orchestrator (lazy init)
+        self.self_improving_orchestrator: Optional[SelfImprovingOrchestrator] = None
+        if self_improving:
+            try:
+                root = project_root or os.getcwd()
+                self.self_improving_orchestrator = SelfImprovingOrchestrator(
+                    agent=self,
+                    project_root=root,
+                )
+            except Exception:
+                pass  # Non-critical: degrade gracefully
+
         # Cached project analysis result
         self._project_analysis: Optional[dict] = None
 
         # Tool schemas
         self.tool_schemas = generate_tool_schemas(self.tools) if self.tools else []
+
+        # Register self-improving orchestrator with tools layer
+        if self.self_improving_orchestrator:
+            set_self_improving_orchestrator(self.self_improving_orchestrator)
 
     def _get_client(self):
         """Lazy-initialize the Anthropic client (supports OpenRouter bypass)."""
@@ -506,6 +526,13 @@ You have full access to the user's file system and terminal via tools.
                 })
             except Exception:
                 pass
+
+        # Auto-start self-improving orchestrator if enabled
+        if self.self_improving_enabled and self.self_improving_orchestrator and not self.self_improving_orchestrator._initialized:
+            try:
+                await self.self_improving_orchestrator.initialize()
+            except Exception:
+                pass  # Non-critical
 
         # Save conversation to memory after completion
         if self.memory_enabled and self.conversation_memory:

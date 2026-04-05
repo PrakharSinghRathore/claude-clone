@@ -122,6 +122,14 @@ class Config:
                 "max_audit_entries": 50000
             }
         },
+        "self_improving": {
+            "enabled": False,
+            "auto_improve": False,
+            "improvement_interval": 3600,
+            "max_patches_per_cycle": 10,
+            "max_extensions_per_cycle": 3,
+            "max_optimizations_per_cycle": 5,
+        },
     }
 
     # OpenRouter / Anthropic base URL
@@ -181,6 +189,7 @@ class Config:
         self.plugins = dict(self.DEFAULTS["plugins"])
         self.collaboration = dict(self.DEFAULTS["collaboration"])
         self.desktop = dict(self.DEFAULTS["desktop"])
+        self.self_improving = dict(self.DEFAULTS["self_improving"])
 
     def _detect_provider(self) -> str:
         """Detect API provider from available keys."""
