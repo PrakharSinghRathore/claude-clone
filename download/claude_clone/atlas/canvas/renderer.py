@@ -32,6 +32,7 @@ class Alignment(Enum):
     CENTER = "center"
     RIGHT = "right"
     JUSTIFY = "justify"
+    STRETCH = "stretch"
 
 
 class FlexDirection(Enum):

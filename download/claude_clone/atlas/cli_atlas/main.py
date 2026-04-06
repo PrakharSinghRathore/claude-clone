@@ -18,7 +18,6 @@ _project_root = str(Path(__file__).parent.parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from atlas.cli_atlas.__init__ import __version__
 from atlas.cli_atlas.config_manager import ConfigManager
 from atlas.cli_atlas.banner import Banner
 from atlas.cli_atlas.skin_engine import SkinEngine
@@ -48,7 +47,7 @@ Run 'atlas <command> --help' for more information on a command.
     parser.add_argument(
         "--version", "-v",
         action="version",
-        version=f"%(prog)s {__version__}",
+        version="%(prog)s 1.0.0",
     )
 
     parser.add_argument(

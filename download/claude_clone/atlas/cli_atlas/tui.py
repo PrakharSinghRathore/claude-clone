@@ -27,7 +27,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from atlas.cli_atlas.__init__ import __version__
 from atlas.cli_atlas.config_manager import ConfigManager, SESSIONS_DIR
 from atlas.cli_atlas.skin_engine import SkinEngine, RESET, BOLD, DIM, ANSI_ESCAPE
 from atlas.cli_atlas.banner import Banner
@@ -827,7 +826,7 @@ class AtlasTUI:
             return
 
         if cmd in ("/version", "/v"):
-            print(f"  Atlas CLI v{__version__}")
+            print(f"  Atlas CLI v1.0.0")
             return
 
         if cmd == "/theme":
