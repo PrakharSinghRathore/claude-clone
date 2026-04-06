@@ -1,267 +1,575 @@
-# Claude Clone v1.2.0
+# Claude Clone v3.0.0 — AI Agent Framework
 
-> A fully working Python clone of **Claude Code** (agentic CLI coding assistant) and **Cowork** (desktop automation tool) — built with pure Python. 50 files, 48,000+ lines of code, 61 tools, 20 specialist teams, and a self-improving system.
+> A comprehensive AI agent framework inspired by Claude Code, enhanced with multi-agent orchestration (Crew), workflow automation (Flow), an event-driven architecture, a full Atlas Agent sub-system, and 24+ messaging platform integrations. 299 Python files, 157,986 lines of code.
 
 ---
 
 ## Table of Contents
 
 - [Overview](#overview)
+- [Project Structure](#project-structure)
+- [Module Descriptions](#module-descriptions)
 - [Features](#features)
-  - [Dual Interface Modes](#-dual-interface-modes)
-  - [Agentic AI Loop](#-agentic-ai-loop)
-  - [61 Built-in Tools](#-61-built-in-tools)
-  - [20 Specialist Teams](#-20-specialist-teams)
-  - [Self-Improving System](#-self-improving-system)
-  - [Desktop Automation](#-desktop-automation)
-  - [Memory & Context](#-memory--context)
-  - [Code Analysis](#-code-analysis)
-  - [Security Scanner](#-security-scanner)
-  - [Sandboxed Execution](#-sandboxed-execution)
-  - [One-Click Deployment](#-one-click-deployment)
-  - [MCP Client](#-mcp-client)
-  - [Plugin System](#-plugin-system)
 - [Quick Start](#quick-start)
 - [Command Line Options](#command-line-options)
-- [Configuration](#configuration)
-- [Project Structure](#project-structure)
-- [Architecture](#architecture)
-- [Tech Stack](#tech-stack)
+- [Project Statistics](#project-statistics)
 - [License](#license)
 
 ---
 
 ## Overview
 
-Claude Clone is a feature-rich AI coding assistant that replicates and extends the capabilities of Anthropic's Claude Code and Cowork products. It runs entirely in Python, supports both CLI and GUI interfaces, and connects to AI models via OpenRouter or the Anthropic API. The agent uses an agentic **Think → Act → Observe → Iterate** loop to autonomously complete complex multi-step coding tasks, while 20 specialist teams and 61 tools give it deep capabilities across every area of software development.
+Claude Clone is a feature-rich, extensible AI agent framework that replicates and significantly extends the capabilities of Anthropic's Claude Code and Cowork products. Built entirely in Python, it provides:
 
-**What makes it special:**
-- **Self-improving** — the AI analyzes its own code, patches bugs, extends capabilities, and optimizes performance
+- **Multi-agent orchestration** via the Crew system — delegate tasks to specialized agent teams with coordinated execution, guardrails, and training
+- **Declarative workflow automation** via the Flow system — define complex multi-step pipelines using decorators (`@start`, `@listen`, `@router`)
+- **Event-driven architecture** — a central event bus with typed events for cross-component communication (Agent, Crew, Task, Tool, LLM, Memory, Flow, System events)
+- **Atlas Agent sub-system** — 24+ integrated subsystems including context compression, smart routing, skills, plugin SDK, canvas UI, media pipeline, multi-platform gateway, security, i18n, and more
+- **61+ built-in tools** covering files, search, execution, web, git, databases, security, deployment, memory, and desktop automation
 - **20 specialist teams** — dedicated agents for search, codegen, debugging, review, testing, security, deployment, and more
-- **Desktop automation** — clipboard monitoring, window management, mouse/keyboard control, voice input, and OCR
-- **Full-stack toolset** — 61 tools covering files, search, execution, web, git, databases, security, deployment, and memory
-- **Dual interface** — terminal CLI (Claude Code style) and desktop GUI (Cowork style)
+- **Self-improving system** — the AI analyzes its own code, patches bugs, extends capabilities, and optimizes performance through 7 coordinated subsystems
+- **Knowledge base** — persistent knowledge storage with graph-based search, extraction, and import capabilities
+- **Multi-provider LLM abstraction** — supports Anthropic, OpenAI, Azure, Google Gemini, Ollama, and any OpenAI-compatible API
+- **Plugin system** — hot-reloadable plugins with SDK for third-party extensions
+- **Dual interface** — terminal CLI (Claude Code style) and desktop GUI (Cowork style), plus a full Atlas TUI
+
+---
+
+## Project Structure
+
+```
+claude_clone/
+├── main.py                              # Entry point (CLI / GUI / Atlas / Doctor / Stats)
+├── config.py                            # Full configuration management (25+ sections)
+├── atlas_bridge.py                      # Central integration facade for all Atlas subsystems
+├── requirements.txt                     # Python dependencies
+│
+├── agent/                               # Core AI Agent
+│   ├── __init__.py
+│   ├── core.py                          # Agentic loop: Think -> Act -> Observe -> Iterate
+│   ├── tools.py                         # 61+ tool implementations (2911 lines)
+│   ├── teams.py                         # 20 specialist team definitions
+│   ├── mcp.py                           # MCP server client (stdio + SSE)
+│   ├── memory.py                        # SQLite-backed persistent memory
+│   ├── sandbox.py                       # Sandboxed code execution
+│   ├── security.py                      # Security & vulnerability scanner
+│   ├── analyzer.py                      # Code analysis engine
+│   ├── deployer.py                      # One-click deployment
+│   ├── model_router.py                  # Multi-model routing & fallback
+│   ├── plan_mode.py                     # Task planning & decomposition
+│   ├── task_queue.py                    # Background task management
+│   ├── session_recorder.py              # Session recording & playback
+│   ├── diff_preview.py                  # Git-style diff visualization
+│   ├── feedback.py                      # User feedback collection
+│   ├── evaluator.py                     # Response quality evaluation
+│   ├── indexer.py                       # Project indexing engine
+│   ├── mentions.py                      # @mention handling in conversations
+│   ├── self_improving.py                # Self-improving system bridge
+│   │
+│   ├── self_improving/                  # Self-Improving System (7 modules)
+│   │   ├── __init__.py
+│   │   ├── safety.py                    # Guardrails, approval gates, rollback
+│   │   ├── evaluator.py                 # Deep static analysis & scoring
+│   │   ├── patcher.py                   # Bug fix generation & application
+│   │   ├── extender.py                  # New tool generation
+│   │   ├── optimizer.py                 # Performance profiling & optimization
+│   │   ├── learner.py                   # User preference learning
+│   │   └── evolution.py                 # Timeline tracking & lineage
+│   │
+│   ├── knowledge_base/                  # Persistent Knowledge Base
+│   │   ├── __init__.py
+│   │   ├── knowledge_store.py           # SQLite knowledge storage
+│   │   ├── knowledge_graph.py           # Graph-based knowledge relationships
+│   │   ├── knowledge_search.py          # Semantic and keyword search
+│   │   ├── knowledge_extractor.py       # Auto-extract knowledge from conversations
+│   │   └── knowledge_importer.py        # Import from Obsidian, Markdown, etc.
+│   │
+│   └── desktop/                         # Desktop Automation
+│       ├── __init__.py
+│       ├── orchestrator.py              # Desktop orchestration
+│       ├── awareness.py                 # Clipboard, windows, screenshots, OCR
+│       ├── controller.py                # Mouse, keyboard, hotkey control
+│       ├── permissions.py               # Permission system & audit log
+│       └── voice.py                     # Speech-to-text & text-to-speech
+│
+├── crew/                                # Multi-Agent Crew Orchestration
+│   ├── __init__.py
+│   ├── crew.py                          # Crew manager (coordinated multi-agent execution)
+│   ├── agent.py                         # CrewAgent definition
+│   ├── task.py                          # Task definition with outputs & delegation
+│   ├── process.py                       # Sequential and parallel execution processes
+│   ├── guardrails.py                    # Output validation & safety guardrails
+│   ├── training.py                      # Iterative crew improvement through training
+│   ├── cache.py                         # Response caching for performance
+│   ├── rpm_controller.py                # Rate limiting per agent
+│   └── usage_metrics.py                 # Token usage tracking per crew run
+│
+├── flow/                                # Workflow Orchestration
+│   ├── __init__.py                      # Exports: Flow, start, listen, router, and_, or_
+│   ├── flow.py                          # Flow engine with decorator-based step definitions
+│   ├── context.py                       # FlowContext for shared state between steps
+│   ├── config.py                        # FlowConfig for global flow settings
+│   ├── human_feedback.py                # Human-in-the-loop feedback gates
+│   ├── persistence/                     # Flow State Persistence
+│   │   ├── __init__.py
+│   │   ├── base.py                      # Abstract persistence backend
+│   │   └── sqlite.py                    # SQLite-based flow state storage
+│   └── visualization/                   # Flow Visualization
+│       ├── __init__.py
+│       ├── schema.py                    # Flow schema definitions
+│       └── builder.py                   # Mermaid / DOT flow diagram generation
+│
+├── events/                              # Event System
+│   ├── __init__.py                      # EventBus singleton + all event type exports
+│   ├── event_bus.py                     # Publish/subscribe event bus
+│   ├── base_events.py                   # BaseEvent and EventPriority
+│   └── event_types/                     # Typed Events
+│       ├── __init__.py
+│       ├── agent_events.py              # Agent lifecycle events
+│       ├── crew_events.py               # Crew execution events
+│       ├── task_events.py               # Task lifecycle events
+│       ├── tool_events.py               # Tool invocation events
+│       ├── llm_events.py                # LLM call events (request, response, error)
+│       ├── memory_events.py             # Memory store/retrieve events
+│       ├── flow_events.py               # Flow step and transition events
+│       └── system_events.py             # System startup, shutdown, error events
+│
+├── knowledge/                           # Knowledge Sources
+│   ├── __init__.py                      # Exports all source types
+│   ├── base.py                          # KnowledgeBase and KnowledgeSource abstractions
+│   └── sources.py                       # PDF, CSV, Excel, JSON, TextFile, String sources
+│
+├── llm/                                 # LLM Abstraction Layer
+│   ├── __init__.py                      # Exports: BaseLLM, LLMConfig, LLMProvider, LLMResponse
+│   ├── base.py                          # Abstract LLM interface with config and response
+│   └── provider.py                      # Multi-provider: Anthropic, OpenAI, Azure, Gemini, Ollama
+│
+├── hooks/                               # Lifecycle Hooks
+│   ├── __init__.py                      # Exports: before/after decorators for LLM and tools
+│   ├── decorators.py                    # @before_llm_call, @after_llm_call, @before_tool_call, @after_tool_call
+│   └── types.py                         # HookContext and HookResult types
+│
+├── evaluation/                          # Agent Evaluation
+│   ├── __init__.py                      # Exports: AgentEvaluator, EvaluationResult, EvaluationMetric
+│   └── evaluator.py                     # Performance measurement and assessment
+│
+├── telemetry/                           # Telemetry & Metrics
+│   ├── __init__.py                      # Exports: TelemetryTracker
+│   └── tracker.py                       # Usage tracking and metrics collection
+│
+├── security/                            # Security Utilities
+│   ├── __init__.py                      # Exports: generate_fingerprint, verify_fingerprint
+│   └── fingerprint.py                   # Agent fingerprinting for identity verification
+│
+├── i18n/                                # Internationalization
+│   ├── __init__.py                      # Exports: I18N, get_i18n
+│   └── loader.py                        # Locale loader with fallback support
+│
+├── atlas/                               # Atlas Agent Sub-system (24 subsystems)
+│   ├── __init__.py                      # Atlas package init
+│   ├── constants.py                     # Shared constants
+│   │
+│   ├── core/                            # Atlas Core
+│   │   ├── __init__.py
+│   │   ├── context_compressor.py        # Context window compression (200K tokens)
+│   │   ├── prompt_builder.py            # Sectioned prompt construction
+│   │   ├── smart_routing.py             # Cost/latency-aware model routing
+│   │   ├── memory_manager.py            # Unified memory management
+│   │   ├── memory_provider.py           # Memory provider interface
+│   │   ├── builtin_memory.py            # Built-in SQLite memory provider
+│   │   ├── insights.py                  # Usage analytics & insights
+│   │   ├── trajectory.py                # RL training data collection
+│   │   ├── title_generator.py           # Auto-generate session titles
+│   │   ├── display.py                   # Display utilities
+│   │   ├── redact.py                    # Sensitive data redaction
+│   │   ├── model_metadata.py            # Model capability metadata
+│   │   ├── context_references.py        # File/URL context resolution
+│   │   ├── credential_pool.py           # Multi-key credential rotation
+│   │   ├── auxiliary_client.py          # Auxiliary model client
+│   │   └── usage_pricing.py             # Token cost estimation
+│   │
+│   ├── tools/                           # Atlas Tools (30 tools)
+│   │   ├── __init__.py
+│   │   ├── registry.py                  # Tool registry & discovery
+│   │   ├── browser_tool.py              # Headless browser automation
+│   │   ├── code_execution.py            # Sandboxed code execution
+│   │   ├── cronjob_tool.py              # Cron job management
+│   │   ├── delegate_tool.py             # Task delegation to specialist agents
+│   │   ├── file_tools.py                # Advanced file operations
+│   │   ├── image_gen_tool.py            # AI image generation
+│   │   ├── mcp_tool.py                  # MCP server integration
+│   │   ├── memory_tool.py               # Memory store/retrieve
+│   │   ├── mixture_of_agents_tool.py    # Mixture-of-Agents routing
+│   │   ├── send_message_tool.py         # Cross-platform messaging
+│   │   ├── session_search.py            # Session history search
+│   │   ├── skill_manager.py             # Skill management
+│   │   ├── skills_hub.py                # Skills discovery hub
+│   │   ├── skills_tool.py               # Skill execution
+│   │   ├── terminal_tool.py             # Advanced terminal control
+│   │   ├── todo_tool.py                 # Todo list management
+│   │   ├── transcription_tool.py        # Audio transcription
+│   │   ├── tts_tool.py                  # Text-to-speech
+│   │   ├── vision_tool.py               # Image understanding
+│   │   ├── web_tools.py                 # Web search & fetch
+│   │   └── web_search.py                # Search engine integration
+│   │
+│   ├── skills/                          # Skills System
+│   │   ├── __init__.py
+│   │   ├── manager.py                   # Skill lifecycle management
+│   │   ├── loader.py                    # Skill discovery & loading
+│   │   ├── executor.py                  # Skill execution engine
+│   │   ├── registry.py                  # Skill registry
+│   │   └── builtins/                    # Built-in Skills
+│   │       ├── __init__.py
+│   │       ├── code_review/             # Automated code review
+│   │       ├── debug/                   # Debugging assistance
+│   │       ├── deploy/                  # Deployment automation
+│   │       ├── git_workflow/            # Git workflow automation
+│   │       └── research/                # Research & information gathering
+│   │
+│   ├── channels/                        # Channel Abstractions
+│   │   ├── __init__.py
+│   │   ├── base.py                      # Abstract channel interface
+│   │   ├── adapter.py                   # Channel adapter & routing
+│   │   ├── bindings.py                  # Platform bindings
+│   │   └── routing.py                   # Message routing engine
+│   │
+│   ├── gateway/                         # Multi-Platform Gateway
+│   │   ├── __init__.py
+│   │   ├── config.py                    # Gateway configuration
+│   │   ├── runner.py                    # Gateway runner & lifecycle
+│   │   ├── session.py                   # Gateway session management
+│   │   ├── delivery.py                  # Message delivery engine
+│   │   ├── hooks.py                     # Gateway lifecycle hooks
+│   │   ├── mirror.py                    # Message mirroring
+│   │   ├── status.py                    # Status reporting
+│   │   ├── stream_consumer.py           # Stream event consumer
+│   │   └── platforms/                   # 24 Platform Integrations
+│   │       ├── __init__.py
+│   │       ├── api_server.py            # REST API server
+│   │       ├── slack.py                 # Slack
+│   │       ├── discord.py               # Discord
+│   │       ├── telegram.py              # Telegram
+│   │       ├── whatsapp.py              # WhatsApp
+│   │       ├── msteams.py               # Microsoft Teams
+│   │       ├── mattermost.py            # Mattermost
+│   │       ├── signal.py                # Signal
+│   │       ├── irc.py                   # IRC
+│   │       ├── matrix.py                # Matrix
+│   │       ├── twitch.py                # Twitch
+│   │       ├── email_platform.py        # Email (SMTP/IMAP)
+│   │       ├── sms.py                   # SMS (Twilio)
+│   │       ├── dingtalk.py              # DingTalk
+│   │       ├── feishu.py                # Feishu/Lark
+│   │       ├── wecom.py                 # WeCom
+│   │       ├── zalo.py                  # Zalo
+│   │       ├── line.py                  # LINE
+│   │       ├── google_chat.py           # Google Chat
+│   │       ├── nextcloud.py             # Nextcloud Talk
+│   │       ├── nostr.py                 # Nostr
+│   │       ├── bluebubbles.py           # BlueBubbles (iMessage)
+│   │       ├── voice_call.py            # Voice call (WebRTC)
+│   │       └── webhook.py               # Generic Webhook
+│   │
+│   ├── plugin_sdk/                      # Plugin Development Kit
+│   │   ├── __init__.py
+│   │   ├── core.py                      # Plugin core framework
+│   │   ├── contracts.py                 # Plugin API contracts
+│   │   ├── loader.py                    # Plugin loader & discovery
+│   │   ├── manifest.py                  # Plugin manifest schema
+│   │   ├── registry.py                  # Plugin registry
+│   │   └── sandbox.py                   # Plugin sandboxing
+│   │
+│   ├── plugins/                         # Built-in Plugins
+│   │   ├── __init__.py
+│   │   └── memory/                      # Memory Provider Plugins (9 providers)
+│   │       ├── __init__.py
+│   │       ├── base.py                  # Memory provider base class
+│   │       ├── registry.py              # Memory provider registry
+│   │       ├── mem0_plugin.py           # Mem0 integration
+│   │       ├── byterover.py             # ByteRover memory
+│   │       ├── hindsight.py             # Hindsight memory
+│   │       ├── holographic.py           # Holographic memory
+│   │       ├── honcho.py                # Honcho memory
+│   │       ├── openviking.py            # OpenViking memory
+│   │       └── retaindb.py              # RetainDB memory
+│   │
+│   ├── config/                          # Atlas Configuration
+│   │   ├── __init__.py
+│   │   ├── loader.py                    # Configuration loading
+│   │   ├── schema.py                    # JSON schema validation
+│   │   └── types.py                     # Configuration type definitions
+│   │
+│   ├── sessions/                        # Session Management
+│   │   ├── __init__.py
+│   │   ├── manager.py                   # Session lifecycle manager
+│   │   ├── store.py                     # Session persistence store
+│   │   ├── keys.py                      # Session key management
+│   │   └── transcript.py                # Session transcript handling
+│   │
+│   ├── security/                        # Atlas Security
+│   │   ├── __init__.py
+│   │   ├── policy.py                    # Security policy engine
+│   │   ├── audit.py                     # Security audit logging
+│   │   ├── allowlist.py                 # Path/command allowlisting
+│   │   ├── sandbox.py                   # Execution sandboxing
+│   │   ├── secrets.py                   # Secret management
+│   │   └── pairing.py                   # Secure device pairing
+│   │
+│   ├── canvas/                          # Canvas / A2UI Visual Workspace
+│   │   ├── __init__.py
+│   │   ├── host.py                      # Canvas host server
+│   │   ├── renderer.py                  # Widget rendering engine
+│   │   └── push.py                      # Real-time canvas push updates
+│   │
+│   ├── media/                           # Media Processing Pipeline
+│   │   ├── __init__.py
+│   │   ├── pipeline.py                  # Media processing orchestration
+│   │   ├── audio.py                     # Audio processing
+│   │   ├── images.py                    # Image processing
+│   │   ├── video.py                     # Video processing
+│   │   ├── vision.py                    # Computer vision
+│   │   └── generation.py                # Media generation (images, audio)
+│   │
+│   ├── acp/                             # Atlas Control Protocol (ACP)
+│   │   ├── __init__.py
+│   │   ├── server.py                    # ACP server (FastAPI)
+│   │   ├── session.py                   # ACP session management
+│   │   ├── auth.py                      # ACP authentication
+│   │   ├── permissions.py               # ACP permission model
+│   │   └── events.py                    # ACP event system
+│   │
+│   ├── cli_atlas/                       # Atlas Terminal UI
+│   │   ├── __init__.py
+│   │   ├── main.py                      # Atlas CLI entry point
+│   │   ├── tui.py                       # Full-featured terminal UI
+│   │   ├── commands.py                  # CLI command definitions
+│   │   ├── callbacks.py                 # UI callback handlers
+│   │   ├── banner.py                    # Startup banner
+│   │   ├── doctor.py                    # Diagnostics system
+│   │   ├── setup.py                     # First-run setup wizard
+│   │   ├── profiles.py                  # Configuration profiles
+│   │   ├── providers.py                 # Provider management
+│   │   ├── config_manager.py            # In-app config management
+│   │   ├── mcp_config.py                # MCP server configuration
+│   │   ├── models_cmd.py                # Model selection commands
+│   │   ├── gateway_cmd.py               # Gateway management commands
+│   │   ├── cron_cmd.py                  # Cron job management commands
+│   │   ├── tools_config.py              # Tool configuration
+│   │   ├── skills_config.py             # Skill configuration
+│   │   ├── skills_hub.py                # Skills discovery hub
+│   │   └── skin_engine.py               # TUI skin/theming engine
+│   │
+│   ├── cron/                            # Cron Scheduler
+│   │   ├── __init__.py
+│   │   ├── scheduler.py                 # Cron job scheduler
+│   │   └── jobs.py                      # Job management
+│   │
+│   ├── tasks/                           # Task Management
+│   │   ├── __init__.py
+│   │   ├── manager.py                   # Task manager
+│   │   ├── executor.py                  # Task executor
+│   │   └── queue.py                     # Task queue
+│   │
+│   ├── web/                             # Web Integration
+│   │   ├── __init__.py
+│   │   ├── fetch.py                     # Web content fetching
+│   │   ├── search.py                    # Web search engine
+│   │   └── links.py                     # Link resolution & preview
+│   │
+│   ├── realtime/                        # Real-time Processing
+│   │   ├── __init__.py
+│   │   ├── transcription.py             # Real-time transcription
+│   │   └── voice.py                     # Voice processing
+│   │
+│   ├── i18n/                            # Internationalization
+│   │   ├── __init__.py
+│   │   ├── loader.py                    # Locale loader
+│   │   └── locales/                     # Locale files
+│   │       ├── __init__.py
+│   │       └── en.json                  # English translations
+│   │
+│   ├── hooks/                           # Atlas Hook System
+│   │   ├── __init__.py
+│   │   └── system.py                    # System-level hooks
+│   │
+│   ├── polls/                           # Polls & Voting
+│   │   ├── __init__.py
+│   │   └── manager.py                   # Poll management
+│   │
+│   ├── pairing/                         # Device Pairing
+│   │   ├── __init__.py
+│   │   ├── discovery.py                 # Device discovery
+│   │   └── manager.py                   # Pairing manager
+│   │
+│   ├── node_host/                       # Node Host (IoT/Edge)
+│   │   ├── __init__.py
+│   │   ├── device.py                    # Device management
+│   │   ├── camera.py                    # Camera access
+│   │   └── screen.py                    # Screen capture
+│   │
+│   └── link_understanding/              # Link Intelligence
+│       ├── __init__.py
+│       └── analyzer.py                  # URL/content analysis
+│
+├── cli/                                 # Claude Code Terminal Interface
+│   ├── __init__.py
+│   ├── app.py                           # CLI application (prompt_toolkit + rich)
+│   └── renderer.py                      # Markdown + syntax highlighting renderer
+│
+├── gui/                                 # Cowork Desktop Interface
+│   ├── __init__.py
+│   ├── app.py                           # Desktop GUI application (tkinter)
+│   ├── sidebar.py                       # File tree + task history sidebar
+│   └── widgets.py                       # Custom tkinter widgets
+│
+├── plugins/                             # Plugin System
+│   ├── __init__.py
+│   └── loader.py                        # Hot-reloadable plugin loader
+│
+└── utils/                               # Shared Utilities
+    ├── __init__.py
+    ├── code_diff.py                     # Unified diff generation
+    ├── database.py                      # Database helpers
+    ├── git_manager.py                   # Git operations wrapper
+    └── webhook.py                       # Webhook integration
+```
+
+---
+
+## Module Descriptions
+
+### `agent/` — Core AI Agent
+The heart of the framework. Contains the agentic Think-Act-Observe-Iterate loop, 61+ tool implementations, 20 specialist teams, memory management, sandboxed execution, code analysis, security scanning, and desktop automation. The `self_improving/` sub-package provides 7 coordinated subsystems for self-analysis and auto-improvement.
+
+### `crew/` — Multi-Agent Crew Orchestration
+Enables coordinated multi-agent execution. Define crews of specialized agents, assign tasks with guardrails, control execution order (sequential or parallel), and track usage metrics. Includes a training handler for iterative crew improvement through repeated execution cycles.
+
+### `flow/` — Workflow Orchestration
+Decorator-based workflow engine for defining complex multi-step pipelines. Use `@start`, `@listen`, `@router`, `@and_`, and `@or_` decorators to wire steps together declaratively. Supports human-in-the-loop feedback gates, persistent state (SQLite backend), and automatic Mermaid/DOT diagram generation for visualization.
+
+### `events/` — Event System
+Central publish/subscribe event bus for cross-component communication. Provides typed events for Agent, Crew, Task, Tool, LLM, Memory, Flow, and System lifecycles. Components emit events; other components subscribe and react — enabling loose coupling between modules.
+
+### `knowledge/` — Knowledge Sources
+Unified interface for ingesting and querying knowledge from external sources. Supports PDF, CSV, Excel, JSON, plain text files, and raw strings as knowledge inputs. Designed to feed the agent's knowledge base for contextual retrieval.
+
+### `llm/` — LLM Abstraction Layer
+Multi-provider language model abstraction supporting Anthropic, OpenAI, Azure OpenAI, Google Gemini, Ollama, and any OpenAI-compatible API. Provides a consistent `LLMConfig`, `LLMResponse`, and `BaseLLM` interface regardless of the underlying provider.
+
+### `hooks/` — Lifecycle Hooks
+Before/after callback system for LLM calls and tool invocations. Use `@before_llm_call`, `@after_llm_call`, `@before_tool_call`, and `@after_tool_call` decorators to inject custom logic (logging, transformation, rate limiting, etc.) into the agent's execution pipeline.
+
+### `evaluation/` — Agent Evaluation
+Performance measurement and assessment framework for agents. Provides `AgentEvaluator`, `EvaluationResult`, and `EvaluationMetric` for quantifying agent quality across multiple dimensions.
+
+### `telemetry/` — Telemetry & Metrics
+Usage tracking and metrics collection for monitoring agent behavior, token consumption, tool usage patterns, and error rates over time.
+
+### `security/` — Security Utilities
+Agent fingerprinting for identity verification. Supports generating and verifying cryptographic fingerprints to ensure agent authenticity and integrity.
+
+### `i18n/` — Internationalization
+Localization support with locale loading and fallback chains. Currently includes English translations with infrastructure for 9 locales (en, es, zh, ja, ko, de, fr, pt, ru).
+
+### `atlas/` — Atlas Agent Sub-system
+A comprehensive agentic sub-system with 24 integrated subsystems, connected via the `AtlasBridge` facade. Includes context compression, smart routing, memory management, skills, plugin SDK, canvas UI, media pipeline, multi-platform gateway (24 messaging platforms), security, session management, ACP server, cron scheduling, and much more.
 
 ---
 
 ## Features
 
-### 🖥️ Dual Interface Modes
+### Core Capabilities
+- **Agentic AI Loop** — Think -> Act -> Observe -> Iterate (up to 10 rounds per message)
+- **61+ Built-in Tools** — files, search, execution, web, git, databases, security, deployment, memory, desktop
+- **20 Specialist Teams** — search, codegen, debug, review, test, refactor, docs, security, perf, devops, database, api, frontend, backend, data, architect, git, requirements, deploy, learn
 
-- **CLI Mode** (`python main.py --cli`): A full terminal UI using `prompt_toolkit` + `rich` with streaming responses, syntax highlighting, file autocomplete, and slash commands
-- **GUI Mode** (`python main.py`): A desktop application using `tkinter` with a file tree sidebar, task checklist, chat area, and settings dialog
+### Multi-Agent Orchestration
+- **Crew System** — Define crews of specialized agents with coordinated task execution
+- **Guardrails** — Output validation and safety constraints on agent responses
+- **Training** — Iterative crew improvement through training cycles with metrics tracking
+- **Caching** — Response caching for performance optimization
+- **Rate Limiting** — Per-agent RPM (requests per minute) control
 
-### 🤖 Agentic AI Loop
+### Workflow Automation
+- **Flow Engine** — Decorator-based multi-step workflow definition
+- **Conditional Routing** — `@router`, `@and_`, `@or_` for branching logic
+- **Human Feedback** — Human-in-the-loop gates for critical decisions
+- **Persistence** — SQLite-backed flow state storage
+- **Visualization** — Auto-generate Mermaid/DOT flow diagrams
 
-The core engine uses a full agentic loop — the AI **thinks**, **acts** (calls tools), **observes** results, and **iterates** — up to 10 rounds per message. This allows it to autonomously break down complex tasks, read files, run commands, debug errors, and refine its approach until the task is complete. Streaming responses deliver every token in real-time.
+### Event-Driven Architecture
+- **Central Event Bus** — Publish/subscribe pattern for loose coupling
+- **8 Typed Event Categories** — Agent, Crew, Task, Tool, LLM, Memory, Flow, System
+- **Priority Levels** — HIGH, NORMAL, LOW event priorities
+- **Async Processing** — Non-blocking event propagation
 
-### 🛠️ 61 Built-in Tools
+### Atlas Agent Sub-system
+- **Context Compression** — Compress conversations to fit 200K+ token contexts
+- **Smart Routing** — Cost/latency-aware model selection
+- **Memory Management** — Unified memory with 9 provider plugins (Mem0, ByteRover, Hindsight, etc.)
+- **Skills System** — Discoverable, executable skills with 5 built-in skills
+- **Plugin SDK** — Full plugin development framework with contracts, sandboxing, and registry
+- **Canvas/A2UI** — Visual workspace with real-time widget push updates
+- **Media Pipeline** — Audio, image, video processing and generation
+- **Multi-Platform Gateway** — 24 messaging platform integrations (Slack, Discord, Telegram, Teams, etc.)
+- **ACP Server** — Editor/IDE integration protocol (FastAPI)
+- **Cron Scheduler** — Scheduled job management
+- **Security** — Policy engine, audit logging, allowlisting, sandboxing, secrets management
+- **Session Management** — Lifecycle management with persistence and transcripts
+- **Internationalization** — 9 supported locales with fallback chains
+- **Device Pairing** — Secure device discovery and pairing
+- **Node Host** — IoT/Edge device management with camera and screen access
+- **Link Understanding** — URL/content intelligence and analysis
+- **Real-time Processing** — Live transcription and voice processing
+- **Web Integration** — Content fetching, search, and link resolution
 
-All tools are async Python functions with auto-generated JSON schemas. Here's the full breakdown:
+### Self-Improving System
+- **Safety** — Guardrails, approval gates, backup/rollback, quarantine zone, protected files
+- **Evaluator** — Deep static analysis, code quality scoring, bug detection
+- **Patcher** — Automatic bug fix generation with verified application
+- **Extender** — Generates new tools to fill capability gaps
+- **Optimizer** — Performance profiling and bottleneck optimization
+- **Learner** — User preference learning and behavior adaptation
+- **Evolution** — Timeline tracking, improvement metrics, generational lineage
 
-| Category | Tools | Description |
-|----------|-------|-------------|
-| **File** | `read_file`, `write_file`, `edit_file`, `append_file`, `delete_file`, `move_file`, `copy_file` | Full file CRUD with encoding detection, path safety checks |
-| **Directory** | `list_directory`, `create_directory`, `get_project_structure` | Tree view, hidden file toggle, depth control |
-| **Search** | `search_files`, `grep`, `find_definition` | Glob search, regex grep, AST-based symbol finding |
-| **Execution** | `run_command`, `run_python`, `run_script` | Shell execution, Python eval, script runner |
-| **Web** | `web_search`, `fetch_url` | DuckDuckGo search, HTML content extraction |
-| **Code Quality** | `lint_python`, `format_python` | Ruff/flake8 linting, Black formatting |
-| **Git** | `get_git_status`, `git_diff`, `git_log`, `git_smart_commit`, `git_repo_stats` | Full git integration with smart commit messages |
-| **System** | `get_environment`, `install_package`, `which` | System info, pip install, command locator |
-| **Sandbox** | `sandbox_execute`, `sandbox_install_package`, `sandbox_list_files` | Isolated code execution with memory/time limits |
-| **Memory** | `memory_search`, `memory_save`, `memory_list_sessions`, `memory_export` | Persistent SQLite-backed conversation memory |
-| **Analysis** | `analyze_project`, `analyze_complexity`, `analyze_dependencies`, `analyze_dead_code` | Deep static analysis: complexity scoring, dependency graphs, dead code detection |
-| **Security** | `security_scan`, `security_scan_secrets`, `security_scan_dependencies` | Vulnerability scanning, secret detection, dependency audit |
-| **Deployment** | `deploy_project`, `detect_deploy_platform` | One-click deploy to Docker, Railway, Vercel, AWS, GCP, Azure |
-| **Database** | `db_query`, `db_list_tables` | Direct SQL query execution and schema inspection |
-| **Desktop** | `desktop_screenshot`, `desktop_clipboard`, `desktop_mouse_click`, `desktop_type_text`, `desktop_hotkey`, `desktop_launch_app`, `desktop_open_url`, `desktop_speak`, `desktop_list_windows`, `desktop_focus_window`, `desktop_close_window`, `desktop_system_info`, `desktop_processes`, `desktop_active_window` | Full desktop control: screen capture, OCR, mouse, keyboard, window management, voice |
-| **Self-Improve** | `self_improve_scan`, `self_improve_run`, `self_improve_status`, `self_improve_report`, `self_improve_feedback` | Self-analysis, auto-patching, optimization, and user feedback loop |
+### Desktop Automation
+- **Awareness** — Clipboard monitoring, window tracking, screenshots with OCR
+- **Controller** — Smooth mouse movement, human-like typing, keyboard hotkeys
+- **Voice** — Speech-to-text (Google/WSR), text-to-speech (pyttsx3), wake word
+- **Permissions** — Granular levels (STANDARD/EXPERT/TRUSTED), audit logging
 
-### 👥 20 Specialist Teams
+### Dual Interface
+- **CLI Mode** — Terminal UI with prompt_toolkit + rich, streaming, autocomplete, slash commands, vim mode
+- **GUI Mode** — Desktop app with tkinter, file tree, task checklist, settings dialog
+- **Atlas TUI** — Full-featured terminal interface with skin engine, profiles, and skills hub
 
-The agent can delegate tasks to specialized sub-agents, each with their own system prompts and tool sets:
-
-| Team | Purpose |
-|------|---------|
-| `search` | Deep code search and information retrieval |
-| `codegen` | Code generation and scaffolding |
-| `debug` | Bug investigation and root cause analysis |
-| `review` | Code review and quality assessment |
-| `test` | Test generation and execution |
-| `refactor` | Code restructuring and optimization |
-| `docs` | Documentation generation |
-| `security` | Security auditing and vulnerability assessment |
-| `perf` | Performance profiling and optimization |
-| `devops` | CI/CD, infrastructure, and operations |
-| `database` | Database design, queries, and migration |
-| `api` | API design and implementation |
-| `frontend` | UI/UX and frontend development |
-| `backend` | Server-side architecture and development |
-| `data` | Data processing and analysis |
-| `architect` | System design and architecture planning |
-| `git` | Version control operations |
-| `requirements` | Requirements analysis and gathering |
-| `deploy` | Deployment and release management |
-| `learn` | Learning new technologies and patterns |
-
-### 🧬 Self-Improving System
-
-The AI that improves itself. Enabled with `--self-improve`, this system has 7 coordinated subsystems:
-
-| Subsystem | File | What It Does |
-|-----------|------|-------------|
-| **Safety** | `safety.py` | Guardrails, approval gates, backup/rollback, quarantine zone, protected files |
-| **Evaluator** | `evaluator.py` | Deep static analysis, code quality scoring, bug detection, function/class metrics |
-| **Patcher** | `patcher.py` | Automatic bug fix generation with verified application |
-| **Extender** | `extender.py` | Generates new tools to fill capability gaps |
-| **Optimizer** | `optimizer.py` | Performance profiling and bottleneck optimization |
-| **Learner** | `learner.py` | User preference learning and behavior adaptation |
-| **Evolution** | `evolution.py` | Timeline tracking, improvement metrics, generational lineage |
-
-All changes go through a safety review gate — the system won't modify protected files, respects change size limits, and maintains a full rollback history.
-
-### 🖥️ Desktop Automation
-
-Full desktop control through the `agent/desktop/` module:
-
-- **Awareness**: Monitor clipboard changes, track active windows, capture screenshots with OCR
-- **Controller**: Smooth mouse movement, human-like typing patterns, keyboard hotkeys
-- **Voice**: Speech-to-text input (Google/WSR), text-to-speech output (pyttsx3), configurable wake word
-- **Permissions**: Granular permission levels (STANDARD/EXPERT/TRUSTED), audit logging, auto-approve for reads
-
-### 🧠 Memory & Context
-
-- Persistent SQLite-backed memory database (`~/.claude_clone/memory.db`)
-- Automatic conversation summarization to stay within context limits
-- Cross-session memory: recall previous conversations and decisions
-- Smart context injection: CWD, OS info, git status, project type detection
-- 90-day retention with configurable limits
-
-### 🔍 Code Analysis
-
-Deep static analysis engine (`agent/analyzer.py`):
-
-- Cyclomatic complexity scoring per function
-- Dependency graph generation (uses NetworkX)
-- Dead code detection across the project
-- Code quality metrics and trends
-- Snapshot comparisons between analysis runs
-
-### 🛡️ Security Scanner
-
-Built-in security scanning (`agent/security.py`):
-
-- Vulnerability detection (SQL injection, XSS, hardcoded secrets, etc.)
-- Secret scanning across codebase (API keys, passwords, tokens)
-- Dependency vulnerability audit
-- Configurable severity thresholds
-- `.claudescanignore` support for false positives
-
-### 🔒 Sandboxed Execution
-
-Safe code execution environment (`agent/sandbox.py`):
-
-- Memory-limited execution (configurable, default 512MB)
-- Timeout enforcement (configurable, default 30s)
-- Support for Python, JavaScript, and Bash
-- Auto-cleanup of sandbox resources
-- Package installation within sandbox
-
-### 🚀 One-Click Deployment
-
-Deploy directly from the CLI (`agent/deployer.py`):
-
-- **Docker**: Auto-generates Dockerfile, builds, and pushes
-- **Railway**: One-command deploy with auto-detection
-- **Vercel**: Frontend/static site deployment
-- **AWS / GCP / Azure**: Cloud platform deployment
-- Platform auto-detection from project structure
-- Deployment history tracking (last 50 deploys)
-- Health check monitoring after deploy
-
-### 📡 MCP Client
-
-Connect to external MCP (Model Context Protocol) servers:
-
-- **stdio** transport (subprocess-based)
-- **SSE** transport (HTTP-based)
-- Load server configs from `~/.claude.json`
-- Auto-merge MCP tools into the agent's tool registry
-
-### 🧩 Plugin System
-
-Hot-reloadable plugin architecture (`plugins/loader.py`):
-
-- Load plugins from `~/.claude_clone/plugins/`
-- Auto-reload on file changes (configurable interval)
-- Plugins can register custom tools and commands
-
-### ⌨️ CLI Features
-
-- Multi-line input (`Shift+Enter`)
-- File path autocomplete (`@` trigger)
-- Command history (Up/Down arrows)
-- Slash commands: `/clear`, `/context`, `/model`, `/tools`, `/compact`, `/export`, `/help`, `/vim`, `/cost`, `/env`, `/git`
-- Vim keybinding mode (`/vim` or `--vim`)
-- Token count and cost estimates after every response
-- Syntax-highlighted markdown rendering
-
-### 🖼️ GUI Features
-
-- Live file tree with file watching (watchdog)
-- Task checklist with status tracking
-- Quick action buttons: Explain Code, Fix Bugs, Write Tests, Refactor
-- Collapsible tool call cards with input/output
-- Settings dialog: API key, model selection, theme
-- Save/load conversations (JSON)
-- Export conversations to Markdown
-- Resizable panels with dark/light themes
+### Knowledge & Memory
+- **Knowledge Base** — Graph-based persistent knowledge storage with semantic search
+- **Memory** — SQLite-backed conversation memory with auto-summarization
+- **Knowledge Import** — Import from Obsidian vaults, Markdown files, and structured data
 
 ---
 
 ## Quick Start
 
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/PrakharSinghRathore/claude-clone.git
-cd claude-clone
-```
-
-### 2. Install Dependencies
+### 1. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Set Your API Key
-
-**Option A: OpenRouter (recommended — supports 200+ models)**
+### 2. Set Your API Key
 
 ```bash
+# OpenRouter (recommended — supports 200+ models)
 export OPENROUTER_API_KEY=sk-or-your-key-here
-```
 
-**Option B: Anthropic Direct**
-
-```bash
+# Or Anthropic Direct
 export ANTHROPIC_API_KEY=sk-ant-your-key-here
 ```
 
-**Option C: Config file** (`~/.claude_clone/config.json`)
-
-```json
-{
-  "provider": "openrouter",
-  "base_url": "https://openrouter.ai/api/v1",
-  "model": "anthropic/claude-sonnet-4-20250514",
-  "max_tokens": 8192,
-  "max_iterations": 10
-}
-```
-
-### 4. Run
+### 3. Run
 
 ```bash
 # Launch the desktop GUI
@@ -270,14 +578,86 @@ python main.py
 # Launch the terminal CLI
 python main.py --cli
 
-# CLI with vim keybindings
-python main.py --cli --vim
+# Enable Atlas Agent mode
+python main.py --atlas-cli
 
-# Enable self-improving system
-python main.py --cli --self-improve
+# Run diagnostics
+python main.py --doctor
 
-# Use a specific model
-python main.py --cli --model anthropic/claude-opus-4-20250514
+# Show project statistics
+python main.py --stats
+```
+
+### Using the Crew System
+
+```python
+from crew import Crew, CrewAgent, Task
+
+# Define agents
+researcher = CrewAgent(
+    role="Researcher",
+    goal="Find relevant information",
+    backstory="You are an expert researcher.",
+)
+
+writer = CrewAgent(
+    role="Writer",
+    goal="Write compelling content",
+    backstory="You are a skilled writer.",
+)
+
+# Define tasks
+research_task = Task(
+    description="Research the latest AI developments",
+    agent=researcher,
+)
+
+write_task = Task(
+    description="Write a summary based on the research",
+    agent=writer,
+    context=[research_task],  # Depends on research output
+)
+
+# Assemble and run crew
+crew = Crew(
+    agents=[researcher, writer],
+    tasks=[research_task, write_task],
+)
+result = crew.run()
+```
+
+### Using the Flow System
+
+```python
+from flow import Flow, start, listen, router, and_
+
+workflow = Flow("My Workflow")
+
+@workflow.start
+def begin(ctx):
+    ctx["data"] = fetch_data()
+    return "process"
+
+@workflow.listen("process")
+def process_data(ctx):
+    ctx["result"] = analyze(ctx["data"])
+    return "route"
+
+@workflow.router("route")
+def route_result(ctx):
+    if ctx["result"]["score"] > 0.8:
+        return "high_quality"
+    return "low_quality"
+
+@workflow.listen("high_quality")
+def handle_high(ctx):
+    deploy(ctx["result"])
+
+@workflow.listen("low_quality")
+def handle_low(ctx):
+    request_review(ctx["result"])
+
+result = workflow.run()
 ```
 
 ---
@@ -287,7 +667,7 @@ python main.py --cli --model anthropic/claude-opus-4-20250514
 ```
 python main.py [OPTIONS]
 
-Options:
+Core:
   --cli                Launch CLI mode (Claude Code terminal)
   --vim                Enable vim keybindings (CLI mode)
   --model MODEL        AI model to use (default: anthropic/claude-sonnet-4-20250514)
@@ -296,264 +676,50 @@ Options:
   --max-iterations N   Max agent iterations per message (default: 10)
   --cwd PATH           Set working directory
   --provider PROVIDER  API provider: openrouter or anthropic (default: openrouter)
-  --agent AGENT        Start with a specific specialist agent (e.g., debug, codegen, security)
+
+Agent:
+  --agent AGENT        Start with a specific specialist agent
   --self-improve       Enable the self-improving system
-  --version            Show version info (v1.2.0)
+  --knowledge-base     Enable the knowledge base system
+
+Atlas:
+  --atlas              Enable Atlas Agent mode
+  --atlas-cli          Launch the Atlas TUI
+  --gateway            Start the Atlas Gateway server
+  --acp                Start the Atlas ACP server
+  --security           Enable security policy enforcement
+  --canvas             Enable Canvas/A2UI visual workspace
+  --voice              Enable real-time voice mode
+  --locale LOCALE      Set UI locale (e.g., en, es, zh)
+
+System:
+  --plugin-dir PATH    Load plugins from directory
+  --sandbox-type TYPE  Sandbox type: none, docker, process, restricted
+  --config-file PATH   Load config from file
+  --doctor             Run full diagnostics
+  --stats              Show project statistics
+  --version            Show version info (v3.0.0)
 ```
 
 ---
 
-## Configuration
+## Project Statistics
 
-Configuration is stored in `~/.claude_clone/config.json`. All sections are optional — defaults are used for anything not specified.
-
-```json
-{
-  "api_key": "sk-or-...",
-  "provider": "openrouter",
-  "base_url": "https://openrouter.ai/api/v1",
-  "model": "anthropic/claude-sonnet-4-20250514",
-  "max_tokens": 8192,
-  "max_iterations": 10,
-  "temperature": 1.0,
-  "theme": "dark",
-  "active_agent": null,
-  "allowed_tools": [],
-  "disabled_tools": [],
-  "auto_approve_tools": [],
-  "mcp_servers": [],
-  "context_files": [],
-  "cost_warning_threshold": 1.0,
-
-  "sandbox": {
-    "enabled": true,
-    "max_memory_mb": 512,
-    "default_timeout": 30,
-    "auto_cleanup": true,
-    "allowed_languages": ["python", "javascript", "bash"]
-  },
-  "memory": {
-    "enabled": true,
-    "db_path": "~/.claude_clone/memory.db",
-    "auto_summarize": true,
-    "max_context_tokens": 4000,
-    "retention_days": 90
-  },
-  "analyzer": {
-    "enabled": true,
-    "auto_analyze": false,
-    "snapshot_on_analyze": true,
-    "max_complexity_threshold": 15,
-    "min_quality_score": 60
-  },
-  "security": {
-    "enabled": true,
-    "auto_scan": false,
-    "severity_threshold": "MEDIUM",
-    "ignore_file": ".claudescanignore",
-    "scan_on_save": false
-  },
-  "deployment": {
-    "default_platform": "docker",
-    "history_limit": 50,
-    "auto_health_check": true,
-    "health_check_timeout": 30
-  },
-  "desktop": {
-    "enabled": true,
-    "mode": "ACTIVE",
-    "awareness": {
-      "monitor_clipboard": true,
-      "monitor_windows": true,
-      "screenshot_on_request": true,
-      "ocr_enabled": true
-    },
-    "voice": {
-      "enabled": false,
-      "stt_engine": "google",
-      "tts_engine": "pyttsx3",
-      "wake_word": "hey claude",
-      "language": "en-US"
-    },
-    "permissions": {
-      "level": "STANDARD",
-      "auto_approve_read": true,
-      "ask_before_delete": true,
-      "audit_log": true
-    }
-  },
-  "self_improving": {
-    "enabled": false,
-    "auto_improve": false,
-    "improvement_interval": 3600,
-    "max_patches_per_cycle": 10,
-    "max_extensions_per_cycle": 3,
-    "max_optimizations_per_cycle": 5
-  }
-}
-```
-
-You can also use a `.env` file in the project directory:
-
-```env
-OPENROUTER_API_KEY=sk-or-...
-ANTHROPIC_API_KEY=sk-ant-...
-CLAUDE_MODEL=anthropic/claude-sonnet-4-20250514
-CLAUDE_MAX_TOKENS=8192
-API_PROVIDER=openrouter
-```
-
----
-
-## Project Structure
-
-```
-claude_clone/
-├── main.py                          # Entry point (CLI or GUI mode)
-├── config.py                        # Full configuration management
-├── requirements.txt                 # Python dependencies (25 packages)
-│
-├── agent/                           # Core AI agent
-│   ├── __init__.py                  # Agent exports
-│   ├── core.py                      # Agentic loop: Think → Act → Observe → Iterate
-│   ├── tools.py                     # All 61 tool implementations
-│   ├── teams.py                     # 20 specialist team definitions
-│   ├── mcp.py                       # MCP server client (stdio + SSE)
-│   ├── memory.py                    # SQLite-backed persistent memory
-│   ├── sandbox.py                   # Sandboxed code execution
-│   ├── security.py                  # Security & vulnerability scanner
-│   ├── analyzer.py                  # Code analysis engine
-│   ├── deployer.py                  # One-click deployment
-│   ├── model_router.py              # Multi-model routing & fallback
-│   ├── plan_mode.py                 # Task planning & decomposition
-│   ├── task_queue.py                # Background task management
-│   ├── session_recorder.py          # Session recording & playback
-│   ├── diff_preview.py              # Git-style diff visualization
-│   ├── feedback.py                  # User feedback collection
-│   ├── evaluator.py                 # Response quality evaluation
-│   ├── indexer.py                   # Project indexing engine
-│   ├── mentions.py                  # @mention handling in conversations
-│   ├── self_improving.py            # Self-improving system bridge
-│   │
-│   ├── self_improving/              # Self-Improving System (7 modules)
-│   │   ├── __init__.py              # Orchestrator & exports
-│   │   ├── safety.py                # Guardrails, approval gates, rollback
-│   │   ├── evaluator.py             # Deep static analysis & scoring
-│   │   ├── patcher.py               # Bug fix generation & application
-│   │   ├── extender.py              # New tool generation
-│   │   ├── optimizer.py             # Performance profiling & optimization
-│   │   ├── learner.py               # User preference learning
-│   │   └── evolution.py             # Timeline tracking & lineage
-│   │
-│   └── desktop/                     # Desktop Automation
-│       ├── __init__.py              # Desktop module init
-│       ├── orchestrator.py          # Desktop orchestration
-│       ├── awareness.py             # Clipboard, windows, screenshots, OCR
-│       ├── controller.py            # Mouse, keyboard, hotkey control
-│       ├── permissions.py           # Permission system & audit log
-│       └── voice.py                 # Speech-to-text & text-to-speech
-│
-├── cli/                             # Claude Code Terminal Interface
-│   ├── __init__.py
-│   ├── app.py                       # CLI application (prompt_toolkit + rich)
-│   └── renderer.py                  # Markdown + syntax highlighting renderer
-│
-├── gui/                             # Cowork Desktop Interface
-│   ├── __init__.py
-│   ├── app.py                       # Desktop GUI application (tkinter)
-│   ├── sidebar.py                   # File tree + task history sidebar
-│   └── widgets.py                   # Custom tkinter widgets
-│
-├── plugins/                         # Plugin System
-│   ├── __init__.py
-│   └── loader.py                    # Hot-reloadable plugin loader
-│
-└── utils/                           # Shared Utilities
-    ├── __init__.py
-    ├── code_diff.py                 # Unified diff generation
-    ├── database.py                  # Database helpers
-    ├── git_manager.py               # Git operations wrapper
-    └── webhook.py                   # Webhook integration
-```
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        main.py (Entry Point)                    │
-│                   --cli  ──→  CLI Mode (prompt_toolkit)         │
-│                   default ──→  GUI Mode (tkinter)               │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      agent/core.py (Agent)                       │
-│                                                                  │
-│   ┌──────────────────────────────────────────────────────────┐  │
-│   │              Agentic Loop (max 10 iterations)            │  │
-│   │                                                          │  │
-│   │    ┌─────────┐    ┌─────────┐    ┌──────────────────┐   │  │
-│   │    │  THINK   │───→│  ACT    │───→│   OBSERVE        │   │  │
-│   │    │ (reason) │    │ (tools) │    │ (read results)   │   │  │
-│   │    └─────────┘    └─────────┘    └────────┬─────────┘   │  │
-│   │         ▲                                   │             │  │
-│   │         └───────────────────────────────────┘             │  │
-│   │                      ITERATE                              │  │
-│   └──────────────────────────────────────────────────────────┘  │
-│                                                                  │
-│   ┌─────────────┐  ┌──────────────┐  ┌────────────────────┐   │
-│   │   Teams     │  │   Memory     │  │  Self-Improving    │   │
-│   │  (20 agents)│  │  (SQLite)    │  │  (7 subsystems)    │   │
-│   └─────────────┘  └──────────────┘  └────────────────────┘   │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    agent/tools.py (61 Tools)                     │
-│                                                                  │
-│   Files │ Search │ Exec │ Web │ Git │ DB │ Desktop │ Security   │
-│   Sandbox │ Memory │ Analysis │ Deploy │ Self-Improve            │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     API Provider Layer                           │
-│                                                                  │
-│   ┌──────────────────┐    ┌──────────────────────┐             │
-│   │   OpenRouter     │ or │   Anthropic Direct   │             │
-│   │ (200+ models)    │    │  (Claude models)     │             │
-│   └──────────────────┘    └──────────────────────┘             │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Tech Stack
-
-| Package | Purpose |
-|---------|---------|
-| `anthropic` | Anthropic SDK for streaming + tool use |
-| `rich` | Terminal UI, markdown rendering, syntax highlighting |
-| `prompt_toolkit` | CLI input, autocomplete, keybindings, history |
-| `tkinter` | Desktop GUI (stdlib) |
-| `httpx` | Async HTTP for web fetch + MCP SSE |
-| `aiohttp` | Async HTTP client for MCP and webhooks |
-| `watchdog` | File system watching (GUI sidebar) |
-| `pathspec` | .gitignore-style file filtering |
-| `python-dotenv` | .env file loading |
-| `chardet` | File encoding detection |
-| `websockets` | WebSocket support for MCP and collaboration |
-| `networkx` | Dependency graph analysis |
-| `psutil` | System resource monitoring |
-| `pyautogui` | Desktop mouse/keyboard automation |
-| `Pillow` | Image processing for screenshots |
-| `pytesseract` | OCR for screenshot text extraction |
-| `pyttsx3` | Text-to-speech for desktop voice |
-| `SpeechRecognition` | Speech-to-text for voice input |
-| `psycopg2-binary` | PostgreSQL database support |
-| `cryptography` | Secure credential storage |
+| Metric | Value |
+|--------|-------|
+| **Python files** | 299 |
+| **Lines of code** | 157,986 |
+| **Top-level modules** | 12 (agent, atlas, cli, crew, evaluation, events, flow, gui, hooks, i18n, knowledge, llm, plugins, security, telemetry, utils) |
+| **Atlas subsystems** | 24 |
+| **Atlas tools** | 30 |
+| **Agent tools** | 61+ |
+| **Specialist teams** | 20 |
+| **Built-in skills** | 5 |
+| **Platform integrations** | 24 (Slack, Discord, Telegram, WhatsApp, Teams, Signal, IRC, Matrix, Twitch, etc.) |
+| **Memory plugins** | 9 |
+| **Event types** | 8 categories |
+| **Supported locales** | 9 |
+| **Self-improving subsystems** | 7 |
 
 ---
 
