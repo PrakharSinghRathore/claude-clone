@@ -112,6 +112,7 @@ class SlashCommandCompleter(Completer):
         "/sandbox", "/sb",
         "/memory", "/analyze", "/scan", "/deploy",
         "/db", "/diff", "/collab", "/plugins",
+        "/hermes", "/hmode", "/skills", "/cron", "/acp", "/gateway", "/route", "/insights",
     ]
 
     def get_completions(self, document, complete_event):
@@ -192,6 +193,7 @@ class ClaudeCodeCLI:
         self.renderer = Renderer(theme=self.config.theme)
         self._build_agent()
         self.vim_mode = False
+        self.hermes_mode = getattr(self.config, 'hermes', None) and self.config.hermes.get("enabled", False)
         self._session: Optional[PromptSession] = None
         self._history_path = Path.home() / ".claude_clone" / "history"
         self._running = False
@@ -222,6 +224,16 @@ class ClaudeCodeCLI:
             else:
                 self.renderer.print(f"[yellow]Unknown agent: {agent_id}[/yellow]")
 
+        # Load Hermes tools if available
+        try:
+            from agent.tools import load_hermes_tools
+            hermes_tools = load_hermes_tools(self.config)
+            if hermes_tools:
+                tools.update(hermes_tools)
+        except ImportError:
+            pass
+
+        hermes_cfg = getattr(self.config, 'hermes', None) or {}
         self.agent = Agent(
             api_key=self.config.api_key,
             model=model,
@@ -232,6 +244,8 @@ class ClaudeCodeCLI:
             temperature=temp,
             base_url=base_url,
             knowledge_base=getattr(self.config, 'knowledge_base', None) and self.config.knowledge_base.get("enabled", False),
+            hermes_mode=self.hermes_mode,
+            hermes_config=hermes_cfg,
         )
 
     def _init_session(self):
@@ -354,6 +368,15 @@ class ClaudeCodeCLI:
   [bold cyan]/plugins list[/bold cyan]        List installed plugins
   [bold cyan]/plugins install [source][/bold cyan]  Install plugin
   [bold cyan]/plugins reload [name][/bold cyan]  Reload plugin
+
+[bold yellow]Hermes Agent:[/bold yellow]
+  [bold cyan]/hermes[/bold cyan]               Toggle Hermes Agent mode
+  [bold cyan]/skills[/bold cyan]               List installed skills
+  [bold cyan]/cron[/bold cyan]                 Show cron jobs
+  [bold cyan]/route[/bold cyan]               Show smart routing info
+  [bold cyan]/insights[/bold cyan]            Show usage insights
+  [bold cyan]/acp[/bold cyan]                 ACP server status
+  [bold cyan]/gateway[/bold cyan]              Gateway status
 
 [bold yellow]Keyboard Shortcuts:[/bold yellow]
 
@@ -638,6 +661,35 @@ class ClaudeCodeCLI:
         # ─── Plugin Commands ──────────────────────────────
         elif cmd == "/plugins":
             self._cmd_plugins(arg)
+            return True
+
+        # ─── Hermes Commands ───────────────────────────────
+        elif cmd in ("/hermes", "/hmode"):
+            self._cmd_hermes(arg)
+            return True
+
+        elif cmd == "/skills":
+            self._cmd_skills(arg)
+            return True
+
+        elif cmd == "/cron":
+            self._cmd_cron(arg)
+            return True
+
+        elif cmd == "/acp":
+            self._cmd_acp(arg)
+            return True
+
+        elif cmd == "/gateway":
+            self._cmd_gateway(arg)
+            return True
+
+        elif cmd == "/route":
+            self._cmd_route(arg)
+            return True
+
+        elif cmd == "/insights":
+            self._cmd_insights(arg)
             return True
 
         else:
@@ -1261,6 +1313,146 @@ class ClaudeCodeCLI:
         else:
             self.renderer.print(f"[yellow]  Unknown collab subcommand: {sub}[/yellow]")
             self.renderer.print("[dim]  Use /collab help to see available commands.[/dim]\n")
+
+    def _cmd_hermes(self, arg: str):
+        """Handle /hermes and /hmode — Toggle Hermes mode on/off for the current session."""
+        self.hermes_mode = not self.hermes_mode
+        status = "ON" if self.hermes_mode else "OFF"
+        self.renderer.print(f"[bold yellow]  Hermes Agent Mode: {status}[/bold yellow]\n")
+        if self.hermes_mode:
+            if not getattr(self.config, 'hermes', None):
+                self.config.hermes = {"enabled": True}
+            else:
+                self.config.hermes["enabled"] = True
+            self.renderer.print("  [dim]Hermes features enabled: context compression, smart routing, skills.[/dim]")
+            # Reload agent with Hermes mode
+            self._build_agent()
+            self.renderer.print("  [green]Agent rebuilt with Hermes tools.[/green]\n")
+        else:
+            if getattr(self.config, 'hermes', None):
+                self.config.hermes["enabled"] = False
+            self.renderer.print("  [dim]Hermes features disabled. Standard mode active.[/dim]\n")
+
+    def _cmd_skills(self, arg: str):
+        """Handle /skills — List installed Hermes skills."""
+        try:
+            from hermes.skills.manager import SkillManager
+            sm = SkillManager(self.config)
+            skills = sm.list_skills()
+            if not skills:
+                self.renderer.print("  [dim]No Hermes skills installed.[/dim]\n")
+                return
+            self.renderer.print(f"\n[bold yellow]  Installed Hermes Skills ({len(skills)}):[/bold yellow]\n")
+            for skill in skills:
+                name = skill.get("name", "unknown")
+                desc = skill.get("description", "")
+                status = skill.get("status", "active")
+                icon = "[green]" if status == "active" else "[yellow]"
+                self.renderer.print(f"  {icon}{name}[/] — {desc}")
+            self.renderer.print()
+        except ImportError:
+            self.renderer.print("  [yellow]Hermes skills module not available. Is the hermes package installed?[/yellow]\n")
+        except Exception as e:
+            self.renderer.print(f"  [red]Error listing skills: {e}[/red]\n")
+
+    def _cmd_cron(self, arg: str):
+        """Handle /cron — Show cron job list."""
+        try:
+            from hermes.cron.jobs import JobManager
+            jm = JobManager(self.config)
+            jobs = jm.list_jobs()
+            if not jobs:
+                self.renderer.print("  [dim]No Hermes cron jobs configured.[/dim]\n")
+                return
+            self.renderer.print(f"\n[bold yellow]  Hermes Cron Jobs ({len(jobs)}):[/bold yellow]\n")
+            for job in jobs:
+                name = job.get("name", "unknown")
+                schedule = job.get("schedule", "")
+                enabled = job.get("enabled", True)
+                icon = "[green]" if enabled else "[dim]"
+                self.renderer.print(f"  {icon}{name}[/] — {schedule}")
+            self.renderer.print()
+        except ImportError:
+            self.renderer.print("  [yellow]Hermes cron module not available. Is the hermes package installed?[/yellow]\n")
+        except Exception as e:
+            self.renderer.print(f"  [red]Error listing cron jobs: {e}[/red]\n")
+
+    def _cmd_acp(self, arg: str):
+        """Handle /acp — Show ACP server status info."""
+        hermes_cfg = getattr(self.config, 'hermes', None) or {}
+        acp_cfg = getattr(self.config, 'hermes_acp', None) or {}
+        self.renderer.print(f"\n[bold yellow]  Hermes ACP Server Status[/bold yellow]\n")
+        self.renderer.print(f"  [bold]Enabled:[/bold]  {hermes_cfg.get('enabled', False)}")
+        self.renderer.print(f"  [bold]Host:[/bold]      {acp_cfg.get('host', '0.0.0.0')}")
+        self.renderer.print(f"  [bold]Port:[/bold]      {acp_cfg.get('port', 8765)}")
+        self.renderer.print(f"  [bold]CORS:[/bold]      {acp_cfg.get('cors_origins', ['*'])}")
+        self.renderer.print(f"  [dim]Start with: python main.py --acp[/dim]\n")
+
+    def _cmd_gateway(self, arg: str):
+        """Handle /gateway — Show gateway platform status."""
+        hermes_cfg = getattr(self.config, 'hermes', None) or {}
+        gw_cfg = getattr(self.config, 'hermes_gateway', None) or {}
+        self.renderer.print(f"\n[bold yellow]  Hermes Gateway Status[/bold yellow]\n")
+        self.renderer.print(f"  [bold]Enabled:[/bold]  {hermes_cfg.get('enabled', False)}")
+        platforms = gw_cfg.get('platforms', {})
+        self.renderer.print(f"  [bold]Platforms:[/bold] {len(platforms)} configured")
+        for name, cfg in platforms.items():
+            enabled = cfg.get('enabled', True)
+            icon = "[green]" if enabled else "[dim]"
+            self.renderer.print(f"    {icon}{name}[/]")
+        self.renderer.print(f"  [bold]Max Sessions:[/bold] {gw_cfg.get('max_concurrent_sessions', 100)}")
+        self.renderer.print(f"  [dim]Start with: python main.py --gateway[/dim]\n")
+
+    def _cmd_route(self, arg: str):
+        """Handle /route — Show smart routing status/model recommendation."""
+        try:
+            from hermes.core.router import SmartRouter
+            router = SmartRouter(self.config)
+            recommendation = router.get_recommendation()
+            self.renderer.print(f"\n[bold yellow]  Smart Routing Recommendation[/bold yellow]\n")
+            self.renderer.print(f"  [bold]Recommended Model:[/bold] {recommendation.get('model', 'N/A')}")
+            self.renderer.print(f"  [bold]Reason:[/bold]             {recommendation.get('reason', 'N/A')}")
+            self.renderer.print(f"  [bold]Estimated Cost:[/bold]     {recommendation.get('estimated_cost', 'N/A')}")
+            self.renderer.print(f"  [bold]Confidence:[/bold]        {recommendation.get('confidence', 'N/A')}")
+            self.renderer.print()
+        except ImportError:
+            # Fallback: show basic routing info
+            self.renderer.print(f"\n[bold yellow]  Smart Routing[/bold yellow]\n")
+            self.renderer.print(f"  [dim]Hermes smart router not available. Using default model.[/dim]")
+            self.renderer.print(f"  [bold]Current Model:[/bold] {self.config.model}")
+            self.renderer.print(f"  [bold]Provider:[/bold]       {self.config.provider}\n")
+        except Exception as e:
+            self.renderer.print(f"  [red]Error getting routing info: {e}[/red]\n")
+
+    def _cmd_insights(self, arg: str):
+        """Handle /insights — Show usage insights."""
+        try:
+            from hermes.core.insights import InsightsManager
+            im = InsightsManager(self.config)
+            insights = im.get_insights()
+            self.renderer.print(f"\n[bold yellow]  Hermes Usage Insights[/bold yellow]\n")
+            if not insights:
+                self.renderer.print("  [dim]No usage insights available yet.[/dim]\n")
+                return
+            for key, value in insights.items():
+                self.renderer.print(f"  [bold]{key}:[/bold] {value}")
+            self.renderer.print()
+        except ImportError:
+            # Fallback: show basic usage from agent
+            self.renderer.print(f"\n[bold yellow]  Usage Insights[/bold yellow]\n")
+            try:
+                tokens = self.agent.get_token_counts()
+                cost = self.agent.estimate_cost()
+                self.renderer.print(f"  [bold]Input Tokens:[/bold]  {tokens.get('input_tokens', 0):,}")
+                self.renderer.print(f"  [bold]Output Tokens:[/bold] {tokens.get('output_tokens', 0):,}")
+                self.renderer.print(f"  [bold]Total Tokens:[/bold]  {tokens.get('total_tokens', 0):,}")
+                self.renderer.print(f"  [bold]Est. Cost:[/bold]       ${cost:.4f}")
+                self.renderer.print(f"  [bold]Messages:[/bold]       {len(self.agent.messages)}")
+            except Exception:
+                self.renderer.print("  [dim]No usage data available.[/dim]")
+            self.renderer.print()
+        except Exception as e:
+            self.renderer.print(f"  [red]Error getting insights: {e}[/red]\n")
 
     def _cmd_plugins(self, arg: str):
         """Handle /plugins subcommands — List, install, reload plugins."""

@@ -571,6 +571,9 @@ class ModelRouter:
         # Lock for thread-safety inside the event loop
         self._lock = asyncio.Lock()
 
+        # Hermes SmartRouter integration (lazy init)
+        self._hermes_smart_router = None
+
     # ------------------------------------------------------------------
     # Initialization
     # ------------------------------------------------------------------
@@ -616,6 +619,9 @@ class ModelRouter:
             else:
                 logger.debug("Registered model %s (%s)", name, cfg.provider.value)
 
+        # Enrich model catalogue from Hermes metadata (non-blocking, graceful fallback)
+        self._enrich_from_hermes_metadata()
+
         self._initialized = True
         logger.info(
             "ModelRouter initialised — %d models registered, Ollama=%s, llama.cpp=%s",
@@ -623,6 +629,67 @@ class ModelRouter:
             self._ollama_available,
             self._llamacpp_available,
         )
+
+    async def enable_hermes_routing(self) -> None:
+        """Enable Hermes SmartRouter for enhanced routing decisions.
+
+        When enabled, the ``route()`` method will delegate to the Hermes
+        SmartRouter for model selection, falling back to the built-in
+        heuristic router if the Hermes router returns no result.
+        """
+        try:
+            from hermes.core.smart_routing import SmartRouter
+            self._hermes_smart_router = SmartRouter()
+            logger.info("Hermes SmartRouter enabled for ModelRouter")
+        except ImportError:
+            logger.warning("hermes.core.smart_routing not available — SmartRouter disabled")
+        except Exception as exc:
+            logger.warning("Failed to initialise Hermes SmartRouter: %s", exc)
+
+    def _enrich_from_hermes_metadata(self) -> None:
+        """Supplement the built-in model catalogue with entries from Hermes ModelMetadata.
+
+        This is called automatically at the end of ``initialize()`` and only
+        registers models that are not already present in the registry.
+        """
+        try:
+            from hermes.core.model_metadata import ModelMetadata
+            metadata = ModelMetadata()
+            catalog = metadata.get_catalog()
+            if not catalog:
+                return
+            for entry in catalog:
+                name = entry.get("name", "")
+                if not name or name in self._models:
+                    continue
+                try:
+                    provider_str = entry.get("provider", "")
+                    provider = ModelProvider(provider_str.lower()) if provider_str else ModelProvider.CUSTOM
+                    cfg = ModelConfig(
+                        name=name,
+                        display_name=entry.get("display_name", name),
+                        provider=provider,
+                        base_url=entry.get("base_url", _DEFAULT_BASE_URLS.get(provider, "")),
+                        max_tokens=entry.get("max_tokens", 4096),
+                        context_window=entry.get("context_window", 8192),
+                        cost_per_input_token=entry.get("cost_per_input_token", 0.0),
+                        cost_per_output_token=entry.get("cost_per_output_token", 0.0),
+                        capabilities=set(),
+                        priority=entry.get("priority", 0),
+                        max_rpm=entry.get("max_rpm", 60),
+                        description=entry.get("description", ""),
+                    )
+                    self._models[cfg.name] = cfg
+                    self._health[cfg.name] = ModelHealth(model_name=cfg.name)
+                    self._rate_limits[cfg.name] = _RateLimitState()
+                    logger.debug("Enriched model catalogue from Hermes: %s", name)
+                except Exception:
+                    continue
+            logger.info("Hermes model metadata enrichment complete (%d total models)", len(self._models))
+        except ImportError:
+            pass  # Hermes not installed — skip enrichment
+        except Exception as exc:
+            logger.debug("Hermes metadata enrichment skipped: %s", exc)
 
     # ------------------------------------------------------------------
     # Model registry
@@ -665,6 +732,31 @@ class ModelRouter:
         """
         if not self._initialized:
             await self.initialize()
+
+        # ── Hermes: Delegate to SmartRouter if available ──
+        if self._hermes_smart_router is not None:
+            try:
+                hermes_decision = self._hermes_smart_router.route(
+                    task_type=task_type,
+                    prompt=prompt,
+                    context_tokens=context_tokens,
+                )
+                if hermes_decision:
+                    model_name = hermes_decision.get("model_name", "")
+                    if model_name and model_name in self._models:
+                        cfg = self._models[model_name]
+                        health = self._health.get(model_name)
+                        est_time = health.avg_response_time_ms if health and health.total_requests > 0 else 500.0
+                        return RouteDecision(
+                            model_name=model_name,
+                            provider=cfg.provider,
+                            reason=f"Hermes SmartRouter selected: {hermes_decision.get('reason', 'smart routing')}",
+                            estimated_cost=hermes_decision.get("estimated_cost", 0.0),
+                            estimated_time_ms=est_time,
+                            score=hermes_decision.get("score", 0.0),
+                        )
+            except Exception as exc:
+                logger.debug("Hermes SmartRouter routing failed, falling back to built-in: %s", exc)
 
         if context_tokens is None:
             context_tokens = _estimate_tokens(prompt)

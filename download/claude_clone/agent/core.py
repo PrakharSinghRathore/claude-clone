@@ -295,6 +295,26 @@ You have full access to the user's file system and terminal via tools.
                     self.tools.update(hermes_tools)
                     self.tool_schemas = generate_tool_schemas(self.tools)
 
+                # Initialize Hermes memory plugins if configured
+                if self.hermes_config.get("memory_plugins", {}).get("enabled", False):
+                    try:
+                        from hermes.plugins.memory.registry import MemoryPluginRegistry
+                        mem_registry = MemoryPluginRegistry()
+                        mem_plugin_configs = self.hermes_config.get("memory_plugins", {}).get("plugins", [])
+                        for plugin_conf in mem_plugin_configs:
+                            try:
+                                mem_registry.register(plugin_conf)
+                            except Exception:
+                                pass
+                        if self._hermes_memory_manager and hasattr(mem_registry, 'get_providers'):
+                            for provider in mem_registry.get_providers():
+                                try:
+                                    self._hermes_memory_manager.register_provider(provider)
+                                except Exception:
+                                    pass
+                    except ImportError:
+                        pass
+
             except ImportError as e:
                 import logging
                 logging.getLogger(__name__).warning(f"Hermes mode requested but import failed: {e}")
@@ -522,6 +542,51 @@ You have full access to the user's file system and terminal via tools.
         except Exception as e:
             return {"status": "error", "error": str(e)}
 
+    async def enable_hermes_cron(self) -> None:
+        """Start the Hermes CronScheduler in a background thread.
+
+        Loads scheduled jobs from the Hermes configuration and runs them
+        in a daemon thread. Non-critical: degrades gracefully if Hermes is
+        not installed or the scheduler fails to start.
+        """
+        try:
+            from hermes.cron.scheduler import CronScheduler
+            from hermes.cron.jobs import JobManager
+            job_manager = JobManager()
+            scheduler = CronScheduler(job_manager=job_manager)
+            import threading
+            thread = threading.Thread(target=scheduler.run, daemon=True, name="hermes-cron")
+            thread.start()
+            self._hermes_cron_scheduler = scheduler
+            self._hermes_cron_thread = thread
+        except ImportError:
+            pass  # Hermes cron not available
+        except Exception:
+            pass  # Non-critical
+
+    async def enable_hermes_skills(self) -> None:
+        """Initialize the Hermes SkillManager and load built-in skills.
+
+        Merges any tool functions exposed by skills into the agent's tool
+        registry. Non-critical: degrades gracefully.
+        """
+        try:
+            from hermes.skills.manager import SkillManager
+            skill_mgr = SkillManager()
+            # Load built-in skills
+            if hasattr(skill_mgr, 'load_builtins'):
+                skill_mgr.load_builtins()
+            # Merge skill tools into agent tools
+            skill_tools = skill_mgr.get_tools() if hasattr(skill_mgr, 'get_tools') else {}
+            if skill_tools:
+                self.tools.update(skill_tools)
+                self.tool_schemas = generate_tool_schemas(self.tools)
+            self._hermes_skill_manager = skill_mgr
+        except ImportError:
+            pass  # Hermes skills not available
+        except Exception:
+            pass  # Non-critical
+
     async def execute_in_sandbox(self, code: str, language: str = "python") -> str:
         """Execute code in an isolated sandbox environment."""
         if not self.sandbox_enabled or not self.sandbox_executor:
@@ -609,6 +674,18 @@ You have full access to the user's file system and terminal via tools.
                 self.messages = await self._hermes_compressor.compress(self.messages, self.model)
             except Exception:
                 pass  # Non-critical: proceed with uncompressed history
+
+        # ── Hermes: Record insights after context compression ──
+        if self.hermes_mode and self._hermes_insights:
+            try:
+                self._hermes_insights.record_event({
+                    "type": "run_start",
+                    "message_length": len(user_message),
+                    "history_length": len(self.messages),
+                    "model": self.model,
+                })
+            except Exception:
+                pass  # Non-critical
 
         # ── Hermes: Record trajectory if enabled ──
         if self.hermes_mode and self._hermes_trajectory:

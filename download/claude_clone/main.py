@@ -126,6 +126,13 @@ Configuration:
     )
 
     parser.add_argument(
+        "--hermes-cli",
+        action="store_true",
+        default=False,
+        help="Launch the Hermes Agent TUI (full-featured terminal interface)",
+    )
+
+    parser.add_argument(
         "--gateway",
         action="store_true",
         default=False,
@@ -186,6 +193,7 @@ Configuration:
         print(f"Self-Improve: enabled")
     if args.hermes:
         config.hermes = {"enabled": True}
+        config.hermes_mode = True
     if getattr(config, 'knowledge_base', None) and config.knowledge_base.get("enabled"):
         print(f"Knowledge Base: enabled")
     if config.hermes.get("enabled"):
@@ -233,6 +241,17 @@ Configuration:
             sys.exit(1)
         except Exception as e:
             print(f"Error starting gateway: {e}")
+            sys.exit(1)
+        return
+
+    # ── Hermes CLI Mode ──
+    if args.hermes_cli:
+        try:
+            from hermes.cli_hermes.main import HermesCLI
+            cli = HermesCLI(config=config)
+            cli.run()
+        except ImportError as e:
+            print(f"Missing dependency for Hermes CLI: {e}")
             sys.exit(1)
         return
 
