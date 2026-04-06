@@ -93,7 +93,7 @@ class Sidebar(ThemedFrame):
     def __init__(self, parent, theme: str = "dark",
                  on_file_select: Callable = None,
                  on_quick_action: Callable = None,
-                 on_hermes_action: Callable = None,
+                 on_atlas_action: Callable = None,
                  **kwargs):
         super().__init__(parent, theme=theme, **kwargs)
 
@@ -101,8 +101,8 @@ class Sidebar(ThemedFrame):
         self.colors = get_theme_colors(theme)
         self.on_file_select = on_file_select
         self.on_quick_action = on_quick_action
-        self.on_hermes_action = on_hermes_action
-        self._hermes_enabled = False
+        self.on_atlas_action = on_atlas_action
+        self._atlas_enabled = False
 
         self._tree_root: Optional[FileTreeItem] = None
         self._tree_items: Dict[str, FileTreeItem] = {}
@@ -136,8 +136,8 @@ class Sidebar(ThemedFrame):
         # ── Quick Actions Section ──
         self._build_quick_actions_section()
 
-        # ── Hermes Agent Section ──
-        self._build_hermes_section()
+        # ── Atlas Agent Section ──
+        self._build_atlas_section()
 
     def _build_file_tree_section(self):
         """Build the file tree section."""
@@ -351,53 +351,53 @@ class Sidebar(ThemedFrame):
         if self.on_quick_action:
             self.on_quick_action(action_id)
 
-    def _build_hermes_section(self):
-        """Build the Hermes Agent section with mode toggle and sub-controls."""
-        hermes_frame = tk.Frame(self._paned, bg=self.colors["bg"])
-        self._paned.add(hermes_frame, height=160, minsize=100)
+    def _build_atlas_section(self):
+        """Build the Atlas Agent section with mode toggle and sub-controls."""
+        atlas_frame = tk.Frame(self._paned, bg=self.colors["bg"])
+        self._paned.add(atlas_frame, height=160, minsize=100)
 
         # ── Header ──
-        header = tk.Frame(hermes_frame, bg=self.colors["bg_secondary"])
+        header = tk.Frame(atlas_frame, bg=self.colors["bg_secondary"])
         header.pack(fill="x")
 
         tk.Label(
-            header, text="  🏛️ Hermes Agent",
+            header, text="  🏛️ Atlas Agent",
             bg=self.colors["bg_secondary"],
             fg=self.colors["fg_bright"],
             font=("Segoe UI", 10, "bold"),
             anchor="w",
         ).pack(side="left", fill="x", pady=4)
 
-        # ── Hermes Mode Toggle ──
-        self._hermes_mode_var = tk.BooleanVar(value=False)
-        mode_row = tk.Frame(hermes_frame, bg=self.colors["bg"])
+        # ── Atlas Mode Toggle ──
+        self._atlas_mode_var = tk.BooleanVar(value=False)
+        mode_row = tk.Frame(atlas_frame, bg=self.colors["bg"])
         mode_row.pack(fill="x", padx=8, pady=(6, 2))
 
-        self._hermes_toggle_cb = tk.Checkbutton(
+        self._atlas_toggle_cb = tk.Checkbutton(
             mode_row,
-            text="Hermes Mode",
-            variable=self._hermes_mode_var,
+            text="Atlas Mode",
+            variable=self._atlas_mode_var,
             bg=self.colors["bg"],
             fg=self.colors["fg"],
             selectcolor=self.colors["bg_tertiary"],
             activebackground=self.colors["bg"],
             activeforeground=self.colors["fg"],
             font=("Segoe UI", 9, "bold"),
-            command=self._on_hermes_mode_toggle,
+            command=self._on_atlas_mode_toggle,
         )
-        self._hermes_toggle_cb.pack(side="left", padx=2, pady=2)
+        self._atlas_toggle_cb.pack(side="left", padx=2, pady=2)
 
         # ── Control Buttons ──
-        btn_frame = tk.Frame(hermes_frame, bg=self.colors["bg"])
+        btn_frame = tk.Frame(atlas_frame, bg=self.colors["bg"])
         btn_frame.pack(fill="x", padx=8, pady=2)
 
-        hermes_buttons = [
-            ("🧩 Skills", "hermes_skills"),
-            ("⏰ Cron Jobs", "hermes_cron"),
-            ("🌐 Gateway", "hermes_gateway"),
+        atlas_buttons = [
+            ("🧩 Skills", "atlas_skills"),
+            ("⏰ Cron Jobs", "atlas_cron"),
+            ("🌐 Gateway", "atlas_gateway"),
         ]
 
-        for i, (label, action_id) in enumerate(hermes_buttons):
+        for i, (label, action_id) in enumerate(atlas_buttons):
             row = i // 2
             col = i % 2
             btn = tk.Label(
@@ -411,7 +411,7 @@ class Sidebar(ThemedFrame):
                 anchor="w",
             )
             btn.grid(row=row, column=col, padx=2, pady=2, sticky="ew")
-            btn.bind("<Button-1>", lambda e, a=action_id: self._on_hermes_button(a))
+            btn.bind("<Button-1>", lambda e, a=action_id: self._on_atlas_button(a))
             btn.bind("<Enter>", lambda e, b=btn: b.configure(bg=self.colors["button_hover"]))
             btn.bind("<Leave>", lambda e, b=btn: b.configure(bg=self.colors["button_bg"]))
 
@@ -419,7 +419,7 @@ class Sidebar(ThemedFrame):
         btn_frame.columnconfigure(1, weight=1)
 
         # ── Smart Routing Status Label ──
-        routing_row = tk.Frame(hermes_frame, bg=self.colors["bg"])
+        routing_row = tk.Frame(atlas_frame, bg=self.colors["bg"])
         routing_row.pack(fill="x", padx=8, pady=(4, 2))
 
         tk.Label(
@@ -441,16 +441,16 @@ class Sidebar(ThemedFrame):
         )
         self._routing_status_label.pack(side="left", padx=(4, 0))
 
-    def _on_hermes_mode_toggle(self):
-        """Handle Hermes mode toggle."""
-        self._hermes_enabled = self._hermes_mode_var.get()
-        if self.on_hermes_action:
-            self.on_hermes_action("hermes_toggle", self._hermes_enabled)
+    def _on_atlas_mode_toggle(self):
+        """Handle Atlas mode toggle."""
+        self._atlas_enabled = self._atlas_mode_var.get()
+        if self.on_atlas_action:
+            self.on_atlas_action("atlas_toggle", self._atlas_enabled)
 
-    def _on_hermes_button(self, action_id: str):
-        """Handle Hermes sub-button click."""
-        if self.on_hermes_action:
-            self.on_hermes_action(action_id, None)
+    def _on_atlas_button(self, action_id: str):
+        """Handle Atlas sub-button click."""
+        if self.on_atlas_action:
+            self.on_atlas_action(action_id, None)
 
     def set_routing_status(self, status: str):
         """Update the smart routing status label."""

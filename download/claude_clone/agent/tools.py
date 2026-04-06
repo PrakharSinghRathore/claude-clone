@@ -2844,14 +2844,14 @@ def _is_path_safe(path: Path) -> bool:
 
 
 # ──────────────────────────────────────────────
-# HERMES TOOLS INTEGRATION
+# ATLAS TOOLS INTEGRATION
 # ──────────────────────────────────────────────
 
-def load_hermes_tools(config=None) -> dict:
-    """Discover and load all Hermes tools from the hermes/tools/ registry.
+def load_atlas_tools(config=None) -> dict:
+    """Discover and load all Atlas tools from the atlas/tools/ registry.
 
     Returns a dict of {tool_name: async_func} compatible with the existing
-    TOOLS_REGISTRY format. Respects config.hermes_tools settings.
+    TOOLS_REGISTRY format. Respects config.atlas_tools settings.
 
     Args:
         config: Optional Config instance. If provided, respects disabled_toolsets
@@ -2860,41 +2860,41 @@ def load_hermes_tools(config=None) -> dict:
     Returns:
         Dict of tool_name → async function.
     """
-    hermes_tools = {}
+    atlas_tools = {}
     try:
-        from hermes.tools import discover_tools
+        from atlas.tools import discover_tools
         all_tools = discover_tools()
-        hermes_tools.update(all_tools)
+        atlas_tools.update(all_tools)
     except ImportError:
-        return hermes_tools
+        return atlas_tools
     except Exception as e:
         import logging
-        logging.getLogger(__name__).warning(f"Failed to load Hermes tools: {e}")
-        return hermes_tools
+        logging.getLogger(__name__).warning(f"Failed to load Atlas tools: {e}")
+        return atlas_tools
 
     # Apply config filters
-    if config and hasattr(config, "hermes_tools"):
-        disabled_toolsets = config.hermes_tools.get("disabled_toolsets", [])
-        disabled_tools = config.hermes_tools.get("disabled_tools", [])
+    if config and hasattr(config, "atlas_tools"):
+        disabled_toolsets = config.atlas_tools.get("disabled_toolsets", [])
+        disabled_tools = config.atlas_tools.get("disabled_tools", [])
 
         if disabled_toolsets or disabled_tools:
-            from hermes.tools.registry import ToolRegistry
+            from atlas.tools.registry import ToolRegistry
             registry = ToolRegistry.instance()
             filtered = {}
-            for name, func in hermes_tools.items():
+            for name, func in atlas_tools.items():
                 tool_info = registry.get_tool(name)
                 if tool_info and tool_info.toolset in disabled_toolsets:
                     continue
                 if name in disabled_tools:
                     continue
                 filtered[name] = func
-            hermes_tools = filtered
+            atlas_tools = filtered
 
-    return hermes_tools
+    return atlas_tools
 
 
-def get_hermes_tool_schemas(config=None) -> list:
-    """Get Anthropic-format tool schemas for all Hermes tools.
+def get_atlas_tool_schemas(config=None) -> list:
+    """Get Anthropic-format tool schemas for all Atlas tools.
 
     Args:
         config: Optional Config instance for filtering.
@@ -2903,7 +2903,7 @@ def get_hermes_tool_schemas(config=None) -> list:
         List of tool schema dicts compatible with Anthropic's tool_use format.
     """
     try:
-        from hermes.tools.registry import ToolRegistry
+        from atlas.tools.registry import ToolRegistry
         registry = ToolRegistry.instance()
         schemas = registry.get_all_schemas()
     except Exception:

@@ -14,32 +14,32 @@ from agent.task_queue import TaskQueue, TaskPriority, TaskStatus, BackgroundTask
 from agent.feedback import FeedbackCollector, FeedbackRating, FeedbackEntry
 from agent.self_improving import SelfImprovingOrchestrator
 
-# Hermes Agent Integration
+# Atlas Agent Integration
 try:
-    from hermes.core.prompt_builder import PromptBuilder
-    from hermes.core.context_compressor import ContextCompressor
-    from hermes.core.memory_manager import MemoryManager
-    from hermes.core.builtin_memory import BuiltinMemoryProvider
-    from hermes.core.smart_routing import SmartRouter
-    from hermes.core.credential_pool import CredentialPool
-    from hermes.core.insights import InsightsManager
-    from hermes.core.trajectory import TrajectoryRecorder
-    from hermes.core.model_metadata import ModelMetadata
-    from hermes.core.usage_pricing import UsagePricing
-    from hermes.core.auxiliary_client import AuxiliaryClient
-    from hermes.core.redact import PIIRedactor
-    from hermes.tools.registry import ToolRegistry
-    from hermes.skills.manager import SkillManager
-    from hermes.cron.scheduler import CronScheduler
-    from hermes.cron.jobs import JobManager
-    from hermes.plugins.memory.registry import MemoryPluginRegistry
-    from hermes.acp.server import create_acp_app
-    from hermes.gateway.runner import GatewayRunner
-    from hermes.gateway.config import GatewayConfig
-    HERMES_AVAILABLE = True
+    from atlas.core.prompt_builder import PromptBuilder
+    from atlas.core.context_compressor import ContextCompressor
+    from atlas.core.memory_manager import MemoryManager
+    from atlas.core.builtin_memory import BuiltinMemoryProvider
+    from atlas.core.smart_routing import SmartRouter
+    from atlas.core.credential_pool import CredentialPool
+    from atlas.core.insights import InsightsManager
+    from atlas.core.trajectory import TrajectoryRecorder
+    from atlas.core.model_metadata import ModelMetadata
+    from atlas.core.usage_pricing import UsagePricing
+    from atlas.core.auxiliary_client import AuxiliaryClient
+    from atlas.core.redact import PIIRedactor
+    from atlas.tools.registry import ToolRegistry
+    from atlas.skills.manager import SkillManager
+    from atlas.cron.scheduler import CronScheduler
+    from atlas.cron.jobs import JobManager
+    from atlas.plugins.memory.registry import MemoryPluginRegistry
+    from atlas.acp.server import create_acp_app
+    from atlas.gateway.runner import GatewayRunner
+    from atlas.gateway.config import GatewayConfig
+    ATLAS_AVAILABLE = True
 except ImportError as e:
-    HERMES_AVAILABLE = False
-    logging.getLogger(__name__).debug("Hermes packages not available: %s", e)
+    ATLAS_AVAILABLE = False
+    logging.getLogger(__name__).debug("Atlas packages not available: %s", e)
 
 __all__ = [
     "Agent", "AgentEvent", "ThinkingEvent", "TextEvent",
@@ -52,8 +52,8 @@ __all__ = [
     "TaskQueue", "TaskPriority", "TaskStatus", "BackgroundTask",
     "FeedbackCollector", "FeedbackRating", "FeedbackEntry",
     "SelfImprovingOrchestrator",
-    # Hermes exports
-    "HERMES_AVAILABLE",
+    # Atlas exports
+    "ATLAS_AVAILABLE",
     "PromptBuilder", "ContextCompressor", "MemoryManager", "BuiltinMemoryProvider",
     "SmartRouter", "CredentialPool", "InsightsManager", "TrajectoryRecorder",
     "ModelMetadata", "UsagePricing", "AuxiliaryClient", "PIIRedactor",

@@ -571,8 +571,8 @@ class ModelRouter:
         # Lock for thread-safety inside the event loop
         self._lock = asyncio.Lock()
 
-        # Hermes SmartRouter integration (lazy init)
-        self._hermes_smart_router = None
+        # Atlas SmartRouter integration (lazy init)
+        self._atlas_smart_router = None
 
     # ------------------------------------------------------------------
     # Initialization
@@ -619,8 +619,8 @@ class ModelRouter:
             else:
                 logger.debug("Registered model %s (%s)", name, cfg.provider.value)
 
-        # Enrich model catalogue from Hermes metadata (non-blocking, graceful fallback)
-        self._enrich_from_hermes_metadata()
+        # Enrich model catalogue from Atlas metadata (non-blocking, graceful fallback)
+        self._enrich_from_atlas_metadata()
 
         self._initialized = True
         logger.info(
@@ -630,30 +630,30 @@ class ModelRouter:
             self._llamacpp_available,
         )
 
-    async def enable_hermes_routing(self) -> None:
-        """Enable Hermes SmartRouter for enhanced routing decisions.
+    async def enable_atlas_routing(self) -> None:
+        """Enable Atlas SmartRouter for enhanced routing decisions.
 
-        When enabled, the ``route()`` method will delegate to the Hermes
+        When enabled, the ``route()`` method will delegate to the Atlas
         SmartRouter for model selection, falling back to the built-in
-        heuristic router if the Hermes router returns no result.
+        heuristic router if the Atlas router returns no result.
         """
         try:
-            from hermes.core.smart_routing import SmartRouter
-            self._hermes_smart_router = SmartRouter()
-            logger.info("Hermes SmartRouter enabled for ModelRouter")
+            from atlas.core.smart_routing import SmartRouter
+            self._atlas_smart_router = SmartRouter()
+            logger.info("Atlas SmartRouter enabled for ModelRouter")
         except ImportError:
-            logger.warning("hermes.core.smart_routing not available — SmartRouter disabled")
+            logger.warning("atlas.core.smart_routing not available — SmartRouter disabled")
         except Exception as exc:
-            logger.warning("Failed to initialise Hermes SmartRouter: %s", exc)
+            logger.warning("Failed to initialise Atlas SmartRouter: %s", exc)
 
-    def _enrich_from_hermes_metadata(self) -> None:
-        """Supplement the built-in model catalogue with entries from Hermes ModelMetadata.
+    def _enrich_from_atlas_metadata(self) -> None:
+        """Supplement the built-in model catalogue with entries from Atlas ModelMetadata.
 
         This is called automatically at the end of ``initialize()`` and only
         registers models that are not already present in the registry.
         """
         try:
-            from hermes.core.model_metadata import ModelMetadata
+            from atlas.core.model_metadata import ModelMetadata
             metadata = ModelMetadata()
             catalog = metadata.get_catalog()
             if not catalog:
@@ -682,14 +682,14 @@ class ModelRouter:
                     self._models[cfg.name] = cfg
                     self._health[cfg.name] = ModelHealth(model_name=cfg.name)
                     self._rate_limits[cfg.name] = _RateLimitState()
-                    logger.debug("Enriched model catalogue from Hermes: %s", name)
+                    logger.debug("Enriched model catalogue from Atlas: %s", name)
                 except Exception:
                     continue
-            logger.info("Hermes model metadata enrichment complete (%d total models)", len(self._models))
+            logger.info("Atlas model metadata enrichment complete (%d total models)", len(self._models))
         except ImportError:
-            pass  # Hermes not installed — skip enrichment
+            pass  # Atlas not installed — skip enrichment
         except Exception as exc:
-            logger.debug("Hermes metadata enrichment skipped: %s", exc)
+            logger.debug("Atlas metadata enrichment skipped: %s", exc)
 
     # ------------------------------------------------------------------
     # Model registry
@@ -733,16 +733,16 @@ class ModelRouter:
         if not self._initialized:
             await self.initialize()
 
-        # ── Hermes: Delegate to SmartRouter if available ──
-        if self._hermes_smart_router is not None:
+        # ── Atlas: Delegate to SmartRouter if available ──
+        if self._atlas_smart_router is not None:
             try:
-                hermes_decision = self._hermes_smart_router.route(
+                atlas_decision = self._atlas_smart_router.route(
                     task_type=task_type,
                     prompt=prompt,
                     context_tokens=context_tokens,
                 )
-                if hermes_decision:
-                    model_name = hermes_decision.get("model_name", "")
+                if atlas_decision:
+                    model_name = atlas_decision.get("model_name", "")
                     if model_name and model_name in self._models:
                         cfg = self._models[model_name]
                         health = self._health.get(model_name)
@@ -750,13 +750,13 @@ class ModelRouter:
                         return RouteDecision(
                             model_name=model_name,
                             provider=cfg.provider,
-                            reason=f"Hermes SmartRouter selected: {hermes_decision.get('reason', 'smart routing')}",
-                            estimated_cost=hermes_decision.get("estimated_cost", 0.0),
+                            reason=f"Atlas SmartRouter selected: {atlas_decision.get('reason', 'smart routing')}",
+                            estimated_cost=atlas_decision.get("estimated_cost", 0.0),
                             estimated_time_ms=est_time,
-                            score=hermes_decision.get("score", 0.0),
+                            score=atlas_decision.get("score", 0.0),
                         )
             except Exception as exc:
-                logger.debug("Hermes SmartRouter routing failed, falling back to built-in: %s", exc)
+                logger.debug("Atlas SmartRouter routing failed, falling back to built-in: %s", exc)
 
         if context_tokens is None:
             context_tokens = _estimate_tokens(prompt)

@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Union
 
-from agent.tools import TOOLS_REGISTRY, generate_tool_schemas, set_self_improving_orchestrator, load_hermes_tools, get_hermes_tool_schemas
+from agent.tools import TOOLS_REGISTRY, generate_tool_schemas, set_self_improving_orchestrator, load_atlas_tools, get_atlas_tool_schemas
 from agent.sandbox import SandboxExecutor
 from agent.memory import ConversationMemory, get_memory
 from agent.analyzer import ProjectAnalyzer
@@ -159,9 +159,9 @@ You have full access to the user's file system and terminal via tools.
         plugins: bool = True,
         self_improving: bool = False,
         knowledge_base: bool = False,
-        hermes_mode: bool = False,
+        atlas_mode: bool = False,
         project_root: str = None,
-        hermes_config: dict = None,
+        atlas_config: dict = None,
     ):
         # API key: OpenRouter first, then Anthropic
         self.api_key = (
@@ -234,82 +234,82 @@ You have full access to the user's file system and terminal via tools.
             except Exception:
                 pass  # Non-critical: degrade gracefully
 
-        # ── Hermes Agent Integration ──
-        self.hermes_mode = hermes_mode
-        self.hermes_config = hermes_config or {}
-        self._hermes_compressor = None
-        self._hermes_prompt_builder = None
-        self._hermes_memory_manager = None
-        self._hermes_smart_router = None
-        self._hermes_credential_pool = None
-        self._hermes_insights = None
-        self._hermes_trajectory = None
+        # ── Atlas Agent Integration ──
+        self.atlas_mode = atlas_mode
+        self.atlas_config = atlas_config or {}
+        self._atlas_compressor = None
+        self._atlas_prompt_builder = None
+        self._atlas_memory_manager = None
+        self._atlas_smart_router = None
+        self._atlas_credential_pool = None
+        self._atlas_insights = None
+        self._atlas_trajectory = None
 
-        if hermes_mode:
+        if atlas_mode:
             try:
-                # Load Hermes context compressor
-                if self.hermes_config.get("context_compression", {}).get("enabled", True):
-                    from hermes.core.context_compressor import ContextCompressor
-                    self._hermes_compressor = ContextCompressor(
-                        strategy=self.hermes_config.get("context_compression", {}).get("strategy", "summarize"),
+                # Load Atlas context compressor
+                if self.atlas_config.get("context_compression", {}).get("enabled", True):
+                    from atlas.core.context_compressor import ContextCompressor
+                    self._atlas_compressor = ContextCompressor(
+                        strategy=self.atlas_config.get("context_compression", {}).get("strategy", "summarize"),
                     )
 
-                # Load Hermes prompt builder
-                if self.hermes_config.get("prompt_builder", {}).get("enabled", True):
-                    from hermes.core.prompt_builder import PromptBuilder
-                    self._hermes_prompt_builder = PromptBuilder()
+                # Load Atlas prompt builder
+                if self.atlas_config.get("prompt_builder", {}).get("enabled", True):
+                    from atlas.core.prompt_builder import PromptBuilder
+                    self._atlas_prompt_builder = PromptBuilder()
 
-                # Load Hermes memory manager
-                from hermes.core.memory_manager import MemoryManager
-                from hermes.core.builtin_memory import BuiltinMemoryProvider
+                # Load Atlas memory manager
+                from atlas.core.memory_manager import MemoryManager
+                from atlas.core.builtin_memory import BuiltinMemoryProvider
                 builtin_provider = BuiltinMemoryProvider()
-                self._hermes_memory_manager = MemoryManager(builtin_provider)
+                self._atlas_memory_manager = MemoryManager(builtin_provider)
 
-                # Load Hermes smart router
-                if self.hermes_config.get("smart_routing", {}).get("enabled", True):
-                    from hermes.core.smart_routing import SmartRouter
-                    self._hermes_smart_router = SmartRouter()
+                # Load Atlas smart router
+                if self.atlas_config.get("smart_routing", {}).get("enabled", True):
+                    from atlas.core.smart_routing import SmartRouter
+                    self._atlas_smart_router = SmartRouter()
 
-                # Load Hermes credential pool (optional)
-                if self.hermes_config.get("credential_pool", {}).get("enabled", False):
-                    from hermes.core.credential_pool import CredentialPool
-                    self._hermes_credential_pool = CredentialPool(
-                        strategy=self.hermes_config.get("credential_pool", {}).get("strategy", "round_robin"),
+                # Load Atlas credential pool (optional)
+                if self.atlas_config.get("credential_pool", {}).get("enabled", False):
+                    from atlas.core.credential_pool import CredentialPool
+                    self._atlas_credential_pool = CredentialPool(
+                        strategy=self.atlas_config.get("credential_pool", {}).get("strategy", "round_robin"),
                     )
 
-                # Load Hermes insights
-                if self.hermes_config.get("insights", {}).get("enabled", True):
-                    from hermes.core.insights import InsightsManager
-                    self._hermes_insights = InsightsManager()
+                # Load Atlas insights
+                if self.atlas_config.get("insights", {}).get("enabled", True):
+                    from atlas.core.insights import InsightsManager
+                    self._atlas_insights = InsightsManager()
 
-                # Load Hermes trajectory recorder (optional)
-                if self.hermes_config.get("trajectory", {}).get("enabled", False):
-                    from hermes.core.trajectory import TrajectoryRecorder
-                    self._hermes_trajectory = TrajectoryRecorder(
-                        storage_path=self.hermes_config.get("trajectory", {}).get("storage_path"),
+                # Load Atlas trajectory recorder (optional)
+                if self.atlas_config.get("trajectory", {}).get("enabled", False):
+                    from atlas.core.trajectory import TrajectoryRecorder
+                    self._atlas_trajectory = TrajectoryRecorder(
+                        storage_path=self.atlas_config.get("trajectory", {}).get("storage_path"),
                     )
 
-                # Merge Hermes tools into the existing tool registry
-                hermes_tools = load_hermes_tools()
-                if hermes_tools:
-                    self.tools.update(hermes_tools)
+                # Merge Atlas tools into the existing tool registry
+                atlas_tools = load_atlas_tools()
+                if atlas_tools:
+                    self.tools.update(atlas_tools)
                     self.tool_schemas = generate_tool_schemas(self.tools)
 
-                # Initialize Hermes memory plugins if configured
-                if self.hermes_config.get("memory_plugins", {}).get("enabled", False):
+                # Initialize Atlas memory plugins if configured
+                if self.atlas_config.get("memory_plugins", {}).get("enabled", False):
                     try:
-                        from hermes.plugins.memory.registry import MemoryPluginRegistry
+                        from atlas.plugins.memory.registry import MemoryPluginRegistry
                         mem_registry = MemoryPluginRegistry()
-                        mem_plugin_configs = self.hermes_config.get("memory_plugins", {}).get("plugins", [])
+                        mem_plugin_configs = self.atlas_config.get("memory_plugins", {}).get("plugins", [])
                         for plugin_conf in mem_plugin_configs:
                             try:
                                 mem_registry.register(plugin_conf)
                             except Exception:
                                 pass
-                        if self._hermes_memory_manager and hasattr(mem_registry, 'get_providers'):
+                        if self._atlas_memory_manager and hasattr(mem_registry, 'get_providers'):
                             for provider in mem_registry.get_providers():
                                 try:
-                                    self._hermes_memory_manager.register_provider(provider)
+                                    self._atlas_memory_manager.register_provider(provider)
                                 except Exception:
                                     pass
                     except ImportError:
@@ -317,10 +317,10 @@ You have full access to the user's file system and terminal via tools.
 
             except ImportError as e:
                 import logging
-                logging.getLogger(__name__).warning(f"Hermes mode requested but import failed: {e}")
+                logging.getLogger(__name__).warning(f"Atlas mode requested but import failed: {e}")
             except Exception as e:
                 import logging
-                logging.getLogger(__name__).warning(f"Hermes initialization failed: {e}")
+                logging.getLogger(__name__).warning(f"Atlas initialization failed: {e}")
 
         # Cached project analysis result
         self._project_analysis: Optional[dict] = None
@@ -542,36 +542,36 @@ You have full access to the user's file system and terminal via tools.
         except Exception as e:
             return {"status": "error", "error": str(e)}
 
-    async def enable_hermes_cron(self) -> None:
-        """Start the Hermes CronScheduler in a background thread.
+    async def enable_atlas_cron(self) -> None:
+        """Start the Atlas CronScheduler in a background thread.
 
-        Loads scheduled jobs from the Hermes configuration and runs them
-        in a daemon thread. Non-critical: degrades gracefully if Hermes is
+        Loads scheduled jobs from the Atlas configuration and runs them
+        in a daemon thread. Non-critical: degrades gracefully if Atlas is
         not installed or the scheduler fails to start.
         """
         try:
-            from hermes.cron.scheduler import CronScheduler
-            from hermes.cron.jobs import JobManager
+            from atlas.cron.scheduler import CronScheduler
+            from atlas.cron.jobs import JobManager
             job_manager = JobManager()
             scheduler = CronScheduler(job_manager=job_manager)
             import threading
-            thread = threading.Thread(target=scheduler.run, daemon=True, name="hermes-cron")
+            thread = threading.Thread(target=scheduler.run, daemon=True, name="atlas-cron")
             thread.start()
-            self._hermes_cron_scheduler = scheduler
-            self._hermes_cron_thread = thread
+            self._atlas_cron_scheduler = scheduler
+            self._atlas_cron_thread = thread
         except ImportError:
-            pass  # Hermes cron not available
+            pass  # Atlas cron not available
         except Exception:
             pass  # Non-critical
 
-    async def enable_hermes_skills(self) -> None:
-        """Initialize the Hermes SkillManager and load built-in skills.
+    async def enable_atlas_skills(self) -> None:
+        """Initialize the Atlas SkillManager and load built-in skills.
 
         Merges any tool functions exposed by skills into the agent's tool
         registry. Non-critical: degrades gracefully.
         """
         try:
-            from hermes.skills.manager import SkillManager
+            from atlas.skills.manager import SkillManager
             skill_mgr = SkillManager()
             # Load built-in skills
             if hasattr(skill_mgr, 'load_builtins'):
@@ -581,9 +581,9 @@ You have full access to the user's file system and terminal via tools.
             if skill_tools:
                 self.tools.update(skill_tools)
                 self.tool_schemas = generate_tool_schemas(self.tools)
-            self._hermes_skill_manager = skill_mgr
+            self._atlas_skill_manager = skill_mgr
         except ImportError:
-            pass  # Hermes skills not available
+            pass  # Atlas skills not available
         except Exception:
             pass  # Non-critical
 
@@ -668,17 +668,17 @@ You have full access to the user's file system and terminal via tools.
             "content": user_message,
         })
 
-        # ── Hermes: Context compression if history is too long ──
-        if self.hermes_mode and self._hermes_compressor and len(self.messages) > 10:
+        # ── Atlas: Context compression if history is too long ──
+        if self.atlas_mode and self._atlas_compressor and len(self.messages) > 10:
             try:
-                self.messages = await self._hermes_compressor.compress(self.messages, self.model)
+                self.messages = await self._atlas_compressor.compress(self.messages, self.model)
             except Exception:
                 pass  # Non-critical: proceed with uncompressed history
 
-        # ── Hermes: Record insights after context compression ──
-        if self.hermes_mode and self._hermes_insights:
+        # ── Atlas: Record insights after context compression ──
+        if self.atlas_mode and self._atlas_insights:
             try:
-                self._hermes_insights.record_event({
+                self._atlas_insights.record_event({
                     "type": "run_start",
                     "message_length": len(user_message),
                     "history_length": len(self.messages),
@@ -687,10 +687,10 @@ You have full access to the user's file system and terminal via tools.
             except Exception:
                 pass  # Non-critical
 
-        # ── Hermes: Record trajectory if enabled ──
-        if self.hermes_mode and self._hermes_trajectory:
+        # ── Atlas: Record trajectory if enabled ──
+        if self.atlas_mode and self._atlas_trajectory:
             try:
-                self._hermes_trajectory.record_user_message(user_message)
+                self._atlas_trajectory.record_user_message(user_message)
             except Exception:
                 pass
 

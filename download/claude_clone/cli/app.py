@@ -112,7 +112,7 @@ class SlashCommandCompleter(Completer):
         "/sandbox", "/sb",
         "/memory", "/analyze", "/scan", "/deploy",
         "/db", "/diff", "/collab", "/plugins",
-        "/hermes", "/hmode", "/skills", "/cron", "/acp", "/gateway", "/route", "/insights",
+        "/atlas", "/hmode", "/skills", "/cron", "/acp", "/gateway", "/route", "/insights",
     ]
 
     def get_completions(self, document, complete_event):
@@ -193,7 +193,7 @@ class ClaudeCodeCLI:
         self.renderer = Renderer(theme=self.config.theme)
         self._build_agent()
         self.vim_mode = False
-        self.hermes_mode = getattr(self.config, 'hermes', None) and self.config.hermes.get("enabled", False)
+        self.atlas_mode = getattr(self.config, 'atlas', None) and self.config.atlas.get("enabled", False)
         self._session: Optional[PromptSession] = None
         self._history_path = Path.home() / ".claude_clone" / "history"
         self._running = False
@@ -224,16 +224,16 @@ class ClaudeCodeCLI:
             else:
                 self.renderer.print(f"[yellow]Unknown agent: {agent_id}[/yellow]")
 
-        # Load Hermes tools if available
+        # Load Atlas tools if available
         try:
-            from agent.tools import load_hermes_tools
-            hermes_tools = load_hermes_tools(self.config)
-            if hermes_tools:
-                tools.update(hermes_tools)
+            from agent.tools import load_atlas_tools
+            atlas_tools = load_atlas_tools(self.config)
+            if atlas_tools:
+                tools.update(atlas_tools)
         except ImportError:
             pass
 
-        hermes_cfg = getattr(self.config, 'hermes', None) or {}
+        atlas_cfg = getattr(self.config, 'atlas', None) or {}
         self.agent = Agent(
             api_key=self.config.api_key,
             model=model,
@@ -244,8 +244,8 @@ class ClaudeCodeCLI:
             temperature=temp,
             base_url=base_url,
             knowledge_base=getattr(self.config, 'knowledge_base', None) and self.config.knowledge_base.get("enabled", False),
-            hermes_mode=self.hermes_mode,
-            hermes_config=hermes_cfg,
+            atlas_mode=self.atlas_mode,
+            atlas_config=atlas_cfg,
         )
 
     def _init_session(self):
@@ -369,8 +369,8 @@ class ClaudeCodeCLI:
   [bold cyan]/plugins install [source][/bold cyan]  Install plugin
   [bold cyan]/plugins reload [name][/bold cyan]  Reload plugin
 
-[bold yellow]Hermes Agent:[/bold yellow]
-  [bold cyan]/hermes[/bold cyan]               Toggle Hermes Agent mode
+[bold yellow]Atlas Agent:[/bold yellow]
+  [bold cyan]/atlas[/bold cyan]               Toggle Atlas Agent mode
   [bold cyan]/skills[/bold cyan]               List installed skills
   [bold cyan]/cron[/bold cyan]                 Show cron jobs
   [bold cyan]/route[/bold cyan]               Show smart routing info
@@ -663,9 +663,9 @@ class ClaudeCodeCLI:
             self._cmd_plugins(arg)
             return True
 
-        # ─── Hermes Commands ───────────────────────────────
-        elif cmd in ("/hermes", "/hmode"):
-            self._cmd_hermes(arg)
+        # ─── Atlas Commands ───────────────────────────────
+        elif cmd in ("/atlas", "/hmode"):
+            self._cmd_atlas(arg)
             return True
 
         elif cmd == "/skills":
@@ -1314,35 +1314,35 @@ class ClaudeCodeCLI:
             self.renderer.print(f"[yellow]  Unknown collab subcommand: {sub}[/yellow]")
             self.renderer.print("[dim]  Use /collab help to see available commands.[/dim]\n")
 
-    def _cmd_hermes(self, arg: str):
-        """Handle /hermes and /hmode — Toggle Hermes mode on/off for the current session."""
-        self.hermes_mode = not self.hermes_mode
-        status = "ON" if self.hermes_mode else "OFF"
-        self.renderer.print(f"[bold yellow]  Hermes Agent Mode: {status}[/bold yellow]\n")
-        if self.hermes_mode:
-            if not getattr(self.config, 'hermes', None):
-                self.config.hermes = {"enabled": True}
+    def _cmd_atlas(self, arg: str):
+        """Handle /atlas and /hmode — Toggle Atlas mode on/off for the current session."""
+        self.atlas_mode = not self.atlas_mode
+        status = "ON" if self.atlas_mode else "OFF"
+        self.renderer.print(f"[bold yellow]  Atlas Agent Mode: {status}[/bold yellow]\n")
+        if self.atlas_mode:
+            if not getattr(self.config, 'atlas', None):
+                self.config.atlas = {"enabled": True}
             else:
-                self.config.hermes["enabled"] = True
-            self.renderer.print("  [dim]Hermes features enabled: context compression, smart routing, skills.[/dim]")
-            # Reload agent with Hermes mode
+                self.config.atlas["enabled"] = True
+            self.renderer.print("  [dim]Atlas features enabled: context compression, smart routing, skills.[/dim]")
+            # Reload agent with Atlas mode
             self._build_agent()
-            self.renderer.print("  [green]Agent rebuilt with Hermes tools.[/green]\n")
+            self.renderer.print("  [green]Agent rebuilt with Atlas tools.[/green]\n")
         else:
-            if getattr(self.config, 'hermes', None):
-                self.config.hermes["enabled"] = False
-            self.renderer.print("  [dim]Hermes features disabled. Standard mode active.[/dim]\n")
+            if getattr(self.config, 'atlas', None):
+                self.config.atlas["enabled"] = False
+            self.renderer.print("  [dim]Atlas features disabled. Standard mode active.[/dim]\n")
 
     def _cmd_skills(self, arg: str):
-        """Handle /skills — List installed Hermes skills."""
+        """Handle /skills — List installed Atlas skills."""
         try:
-            from hermes.skills.manager import SkillManager
+            from atlas.skills.manager import SkillManager
             sm = SkillManager(self.config)
             skills = sm.list_skills()
             if not skills:
-                self.renderer.print("  [dim]No Hermes skills installed.[/dim]\n")
+                self.renderer.print("  [dim]No Atlas skills installed.[/dim]\n")
                 return
-            self.renderer.print(f"\n[bold yellow]  Installed Hermes Skills ({len(skills)}):[/bold yellow]\n")
+            self.renderer.print(f"\n[bold yellow]  Installed Atlas Skills ({len(skills)}):[/bold yellow]\n")
             for skill in skills:
                 name = skill.get("name", "unknown")
                 desc = skill.get("description", "")
@@ -1351,20 +1351,20 @@ class ClaudeCodeCLI:
                 self.renderer.print(f"  {icon}{name}[/] — {desc}")
             self.renderer.print()
         except ImportError:
-            self.renderer.print("  [yellow]Hermes skills module not available. Is the hermes package installed?[/yellow]\n")
+            self.renderer.print("  [yellow]Atlas skills module not available. Is the atlas package installed?[/yellow]\n")
         except Exception as e:
             self.renderer.print(f"  [red]Error listing skills: {e}[/red]\n")
 
     def _cmd_cron(self, arg: str):
         """Handle /cron — Show cron job list."""
         try:
-            from hermes.cron.jobs import JobManager
+            from atlas.cron.jobs import JobManager
             jm = JobManager(self.config)
             jobs = jm.list_jobs()
             if not jobs:
-                self.renderer.print("  [dim]No Hermes cron jobs configured.[/dim]\n")
+                self.renderer.print("  [dim]No Atlas cron jobs configured.[/dim]\n")
                 return
-            self.renderer.print(f"\n[bold yellow]  Hermes Cron Jobs ({len(jobs)}):[/bold yellow]\n")
+            self.renderer.print(f"\n[bold yellow]  Atlas Cron Jobs ({len(jobs)}):[/bold yellow]\n")
             for job in jobs:
                 name = job.get("name", "unknown")
                 schedule = job.get("schedule", "")
@@ -1373,16 +1373,16 @@ class ClaudeCodeCLI:
                 self.renderer.print(f"  {icon}{name}[/] — {schedule}")
             self.renderer.print()
         except ImportError:
-            self.renderer.print("  [yellow]Hermes cron module not available. Is the hermes package installed?[/yellow]\n")
+            self.renderer.print("  [yellow]Atlas cron module not available. Is the atlas package installed?[/yellow]\n")
         except Exception as e:
             self.renderer.print(f"  [red]Error listing cron jobs: {e}[/red]\n")
 
     def _cmd_acp(self, arg: str):
         """Handle /acp — Show ACP server status info."""
-        hermes_cfg = getattr(self.config, 'hermes', None) or {}
-        acp_cfg = getattr(self.config, 'hermes_acp', None) or {}
-        self.renderer.print(f"\n[bold yellow]  Hermes ACP Server Status[/bold yellow]\n")
-        self.renderer.print(f"  [bold]Enabled:[/bold]  {hermes_cfg.get('enabled', False)}")
+        atlas_cfg = getattr(self.config, 'atlas', None) or {}
+        acp_cfg = getattr(self.config, 'atlas_acp', None) or {}
+        self.renderer.print(f"\n[bold yellow]  Atlas ACP Server Status[/bold yellow]\n")
+        self.renderer.print(f"  [bold]Enabled:[/bold]  {atlas_cfg.get('enabled', False)}")
         self.renderer.print(f"  [bold]Host:[/bold]      {acp_cfg.get('host', '0.0.0.0')}")
         self.renderer.print(f"  [bold]Port:[/bold]      {acp_cfg.get('port', 8765)}")
         self.renderer.print(f"  [bold]CORS:[/bold]      {acp_cfg.get('cors_origins', ['*'])}")
@@ -1390,10 +1390,10 @@ class ClaudeCodeCLI:
 
     def _cmd_gateway(self, arg: str):
         """Handle /gateway — Show gateway platform status."""
-        hermes_cfg = getattr(self.config, 'hermes', None) or {}
-        gw_cfg = getattr(self.config, 'hermes_gateway', None) or {}
-        self.renderer.print(f"\n[bold yellow]  Hermes Gateway Status[/bold yellow]\n")
-        self.renderer.print(f"  [bold]Enabled:[/bold]  {hermes_cfg.get('enabled', False)}")
+        atlas_cfg = getattr(self.config, 'atlas', None) or {}
+        gw_cfg = getattr(self.config, 'atlas_gateway', None) or {}
+        self.renderer.print(f"\n[bold yellow]  Atlas Gateway Status[/bold yellow]\n")
+        self.renderer.print(f"  [bold]Enabled:[/bold]  {atlas_cfg.get('enabled', False)}")
         platforms = gw_cfg.get('platforms', {})
         self.renderer.print(f"  [bold]Platforms:[/bold] {len(platforms)} configured")
         for name, cfg in platforms.items():
@@ -1406,7 +1406,7 @@ class ClaudeCodeCLI:
     def _cmd_route(self, arg: str):
         """Handle /route — Show smart routing status/model recommendation."""
         try:
-            from hermes.core.router import SmartRouter
+            from atlas.core.router import SmartRouter
             router = SmartRouter(self.config)
             recommendation = router.get_recommendation()
             self.renderer.print(f"\n[bold yellow]  Smart Routing Recommendation[/bold yellow]\n")
@@ -1418,7 +1418,7 @@ class ClaudeCodeCLI:
         except ImportError:
             # Fallback: show basic routing info
             self.renderer.print(f"\n[bold yellow]  Smart Routing[/bold yellow]\n")
-            self.renderer.print(f"  [dim]Hermes smart router not available. Using default model.[/dim]")
+            self.renderer.print(f"  [dim]Atlas smart router not available. Using default model.[/dim]")
             self.renderer.print(f"  [bold]Current Model:[/bold] {self.config.model}")
             self.renderer.print(f"  [bold]Provider:[/bold]       {self.config.provider}\n")
         except Exception as e:
@@ -1427,10 +1427,10 @@ class ClaudeCodeCLI:
     def _cmd_insights(self, arg: str):
         """Handle /insights — Show usage insights."""
         try:
-            from hermes.core.insights import InsightsManager
+            from atlas.core.insights import InsightsManager
             im = InsightsManager(self.config)
             insights = im.get_insights()
-            self.renderer.print(f"\n[bold yellow]  Hermes Usage Insights[/bold yellow]\n")
+            self.renderer.print(f"\n[bold yellow]  Atlas Usage Insights[/bold yellow]\n")
             if not insights:
                 self.renderer.print("  [dim]No usage insights available yet.[/dim]\n")
                 return

@@ -252,9 +252,9 @@ class CoworkApp:
         self._cost_var = None
         self._cancel_event = threading.Event()
 
-        # Hermes state
-        self._hermes_enabled = False
-        self._hermes_registry = None
+        # Atlas state
+        self._atlas_enabled = False
+        self._atlas_registry = None
 
         # Conversations
         self._conversations_dir = Path.home() / ".claude_clone" / "conversations"
@@ -369,10 +369,10 @@ class CoworkApp:
         tools_menu.add_command(label="Settings", command=self._show_settings)
         tools_menu.add_command(label="Environment Info", command=self._show_env_info)
         tools_menu.add_separator()
-        tools_menu.add_command(label="Toggle Hermes Mode", command=self._toggle_hermes_mode)
-        tools_menu.add_command(label="Hermes Skills", command=lambda: self._on_hermes_action("hermes_skills", None))
-        tools_menu.add_command(label="Hermes Cron Jobs", command=lambda: self._on_hermes_action("hermes_cron", None))
-        tools_menu.add_command(label="Hermes Gateway Status", command=lambda: self._on_hermes_action("hermes_gateway", None))
+        tools_menu.add_command(label="Toggle Atlas Mode", command=self._toggle_atlas_mode)
+        tools_menu.add_command(label="Atlas Skills", command=lambda: self._on_atlas_action("atlas_skills", None))
+        tools_menu.add_command(label="Atlas Cron Jobs", command=lambda: self._on_atlas_action("atlas_cron", None))
+        tools_menu.add_command(label="Atlas Gateway Status", command=lambda: self._on_atlas_action("atlas_gateway", None))
         menubar.add_cascade(label="Tools", menu=tools_menu)
 
         # Help menu
@@ -439,7 +439,7 @@ class CoworkApp:
             body, theme=self.theme,
             on_file_select=self._on_file_select,
             on_quick_action=self._on_quick_action,
-            on_hermes_action=self._on_hermes_action,
+            on_atlas_action=self._on_atlas_action,
             bg=self.colors["sidebar_bg"],
         )
         body.add(self._sidebar, width=260, minsize=200)
@@ -547,10 +547,10 @@ class CoworkApp:
         self._status_var = tk.StringVar(value="Ready")
         self._cost_var = tk.StringVar(value="")
 
-        self._hermes_status_var = tk.StringVar(value="")
+        self._atlas_status_var = tk.StringVar(value="")
 
         tk.Label(
-            status_bar, textvariable=self._hermes_status_var,
+            status_bar, textvariable=self._atlas_status_var,
             bg=self.colors["bg_tertiary"], fg=self.colors.get("success", "#4ec9b0"),
             font=("Segoe UI", 8, "bold"), anchor="w",
         ).pack(side="left", padx=(8, 12))
@@ -636,91 +636,91 @@ class CoworkApp:
                     self._agent.add_context(file_path)
                 self._set_status(f"Added {file_path} to context")
 
-    def _on_hermes_action(self, action_id: str, value):
-        """Handle Hermes-related actions from sidebar and menus."""
-        if action_id == "hermes_toggle":
-            self._set_hermes_mode(value)
-        elif action_id == "hermes_skills":
-            self._show_hermes_skills()
-        elif action_id == "hermes_cron":
-            self._show_hermes_cron()
-        elif action_id == "hermes_gateway":
-            self._show_hermes_gateway()
+    def _on_atlas_action(self, action_id: str, value):
+        """Handle Atlas-related actions from sidebar and menus."""
+        if action_id == "atlas_toggle":
+            self._set_atlas_mode(value)
+        elif action_id == "atlas_skills":
+            self._show_atlas_skills()
+        elif action_id == "atlas_cron":
+            self._show_atlas_cron()
+        elif action_id == "atlas_gateway":
+            self._show_atlas_gateway()
 
-    def _toggle_hermes_mode(self):
-        """Toggle Hermes mode from the Tools menu."""
-        new_state = not self._hermes_enabled
-        self._set_hermes_mode(new_state)
+    def _toggle_atlas_mode(self):
+        """Toggle Atlas mode from the Tools menu."""
+        new_state = not self._atlas_enabled
+        self._set_atlas_mode(new_state)
         # Sync sidebar toggle
-        if self._sidebar and hasattr(self._sidebar, '_hermes_mode_var'):
-            self._sidebar._hermes_mode_var.set(new_state)
-            self._sidebar._hermes_enabled = new_state
+        if self._sidebar and hasattr(self._sidebar, '_atlas_mode_var'):
+            self._sidebar._atlas_mode_var.set(new_state)
+            self._sidebar._atlas_enabled = new_state
 
-    def _set_hermes_mode(self, enabled: bool):
-        """Enable or disable Hermes mode, loading/unloading Hermes tools."""
-        self._hermes_enabled = enabled
+    def _set_atlas_mode(self, enabled: bool):
+        """Enable or disable Atlas mode, loading/unloading Atlas tools."""
+        self._atlas_enabled = enabled
 
         if enabled:
             try:
-                from hermes.tools import discover_tools, ToolRegistry
+                from atlas.tools import discover_tools, ToolRegistry
                 registry = discover_tools()
-                self._hermes_registry = registry
+                self._atlas_registry = registry
 
-                # Merge Hermes tools into the existing agent's tool set
+                # Merge Atlas tools into the existing agent's tool set
                 if self._agent:
-                    hermes_tools = registry.get_tools_dict()
-                    self._agent.tools.update(hermes_tools)
-                    self._agent.hermes_mode = True
+                    atlas_tools = registry.get_tools_dict()
+                    self._agent.tools.update(atlas_tools)
+                    self._agent.atlas_mode = True
 
                 # Update status indicators
                 tool_count = len(registry.list_tools(enabled_only=True))
-                self._hermes_status_var.set(f"🏛️ HERMES · {tool_count} tools")
+                self._atlas_status_var.set(f"🏛️ ATLAS · {tool_count} tools")
                 self._sidebar.set_routing_status("Active")
-                self._set_status(f"Hermes mode enabled — {tool_count} tools loaded")
+                self._set_status(f"Atlas mode enabled — {tool_count} tools loaded")
 
             except ImportError:
-                self._hermes_enabled = False
-                if self._sidebar and hasattr(self._sidebar, '_hermes_mode_var'):
-                    self._sidebar._hermes_mode_var.set(False)
-                    self._sidebar._hermes_enabled = False
+                self._atlas_enabled = False
+                if self._sidebar and hasattr(self._sidebar, '_atlas_mode_var'):
+                    self._sidebar._atlas_mode_var.set(False)
+                    self._sidebar._atlas_enabled = False
                 self._add_error_message(
-                    "Hermes is not installed. Install it with: pip install -e .\n"
-                    "Or ensure the hermes/ package is available."
+                    "Atlas is not installed. Install it with: pip install -e .\n"
+                    "Or ensure the atlas/ package is available."
                 )
-                self._hermes_status_var.set("")
+                self._atlas_status_var.set("")
             except Exception as e:
-                self._hermes_enabled = False
-                if self._sidebar and hasattr(self._sidebar, '_hermes_mode_var'):
-                    self._sidebar._hermes_mode_var.set(False)
-                    self._sidebar._hermes_enabled = False
-                self._add_error_message(f"Failed to enable Hermes: {e}")
-                self._hermes_status_var.set("")
+                self._atlas_enabled = False
+                if self._sidebar and hasattr(self._sidebar, '_atlas_mode_var'):
+                    self._sidebar._atlas_mode_var.set(False)
+                    self._sidebar._atlas_enabled = False
+                self._add_error_message(f"Failed to enable Atlas: {e}")
+                self._atlas_status_var.set("")
         else:
-            # Disable Hermes mode
-            self._hermes_registry = None
-            self._hermes_status_var.set("")
+            # Disable Atlas mode
+            self._atlas_registry = None
+            self._atlas_status_var.set("")
             self._sidebar.set_routing_status("Inactive")
-            if self._agent and hasattr(self._agent, 'hermes_mode'):
-                self._agent.hermes_mode = False
+            if self._agent and hasattr(self._agent, 'atlas_mode'):
+                self._agent.atlas_mode = False
             # Re-init agent to restore original tool set
             self._init_agent(agent_id=self.config.active_agent)
-            self._set_status("Hermes mode disabled")
+            self._set_status("Atlas mode disabled")
 
-    def _show_hermes_skills(self):
-        """Show installed Hermes skills in a dialog."""
+    def _show_atlas_skills(self):
+        """Show installed Atlas skills in a dialog."""
         try:
-            from hermes.tools import ToolRegistry
+            from atlas.tools import ToolRegistry
             registry = ToolRegistry.instance()
             toolsets = registry.list_toolsets()
         except ImportError:
-            messagebox.showinfo("Hermes Skills", "Hermes is not installed.")
+            messagebox.showinfo("Atlas Skills", "Atlas is not installed.")
             return
         except Exception as e:
-            messagebox.showinfo("Hermes Skills", f"Error loading skills: {e}")
+            messagebox.showinfo("Atlas Skills", f"Error loading skills: {e}")
             return
 
         if not toolsets:
-            messagebox.showinfo("Hermes Skills", "No Hermes toolsets are currently registered.")
+            messagebox.showinfo("Atlas Skills", "No Atlas toolsets are currently registered.")
             return
 
         lines = []
@@ -732,13 +732,13 @@ class CoworkApp:
                 lines.append(f"   … and {len(tools) - 6} more")
 
         text = "\n".join(lines)
-        messagebox.showinfo("Hermes Skills", text)
+        messagebox.showinfo("Atlas Skills", text)
 
-    def _show_hermes_cron(self):
-        """Show Hermes cron job status."""
+    def _show_atlas_cron(self):
+        """Show Atlas cron job status."""
         try:
-            from hermes.cron.scheduler import CronScheduler
-            from hermes.cron.jobs import JobManager, JobStatus
+            from atlas.cron.scheduler import CronScheduler
+            from atlas.cron.jobs import JobManager, JobStatus
             data_dir = Path.home() / ".claude_clone" / "cron"
             jm = JobManager(data_dir=data_dir)
             # Use synchronous list if available
@@ -758,18 +758,18 @@ class CoworkApp:
                     next_run = j.next_run.isoformat() if j.next_run else "N/A"
                     text += f"  • {j.name} (next: {next_run})\n"
         except ImportError:
-            messagebox.showinfo("Hermes Cron", "Hermes cron module is not available.")
+            messagebox.showinfo("Atlas Cron", "Atlas cron module is not available.")
             return
         except Exception as e:
-            messagebox.showinfo("Hermes Cron", f"Error reading cron status: {e}")
+            messagebox.showinfo("Atlas Cron", f"Error reading cron status: {e}")
             return
 
-        messagebox.showinfo("Hermes Cron Jobs", text)
+        messagebox.showinfo("Atlas Cron Jobs", text)
 
-    def _show_hermes_gateway(self):
-        """Show Hermes gateway status."""
+    def _show_atlas_gateway(self):
+        """Show Atlas gateway status."""
         try:
-            from hermes.gateway.status import GatewayStatus
+            from atlas.gateway.status import GatewayStatus
             status = GatewayStatus()
             report = status.get_report()
             overall = report.get("status", "unknown")
@@ -788,12 +788,12 @@ class CoworkApp:
                 lines.append("\nNo platforms registered.")
                 lines.append("Start the gateway to connect platforms.")
 
-            messagebox.showinfo("Hermes Gateway", "\n".join(lines))
+            messagebox.showinfo("Atlas Gateway", "\n".join(lines))
         except ImportError:
-            messagebox.showinfo("Hermes Gateway", "Hermes gateway module is not available.")
+            messagebox.showinfo("Atlas Gateway", "Atlas gateway module is not available.")
             return
         except Exception as e:
-            messagebox.showinfo("Hermes Gateway", f"Error reading gateway status: {e}")
+            messagebox.showinfo("Atlas Gateway", f"Error reading gateway status: {e}")
             return
 
     def _on_close(self):
@@ -1132,14 +1132,14 @@ class CoworkApp:
     def _show_env_info(self):
         """Show environment information in a dialog."""
         import platform
-        hermes_info = "Disabled"
-        hermes_tools = ""
-        if self._hermes_enabled and self._hermes_registry:
+        atlas_info = "Disabled"
+        atlas_tools = ""
+        if self._atlas_enabled and self._atlas_registry:
             try:
-                hermes_info = "Enabled"
-                hermes_tools = f"\nHermes Tools: {len(self._hermes_registry.list_tools(enabled_only=True))} loaded"
+                atlas_info = "Enabled"
+                atlas_tools = f"\nAtlas Tools: {len(self._atlas_registry.list_tools(enabled_only=True))} loaded"
             except Exception:
-                hermes_info = "Error"
+                atlas_info = "Error"
         info = (
             f"Python: {sys.version}\n"
             f"OS: {platform.system()} {platform.release()}\n"
@@ -1150,7 +1150,7 @@ class CoworkApp:
             f"Theme: {self.theme}\n"
             f"API Key: {'Set' if self.config.api_key else 'Not set'}\n"
             f"Active Agent: {self.config.active_agent or 'default'}\n"
-            f"Hermes Mode: {hermes_info}{hermes_tools}\n"
+            f"Atlas Mode: {atlas_info}{atlas_tools}\n"
         )
         messagebox.showinfo("Environment", info)
 

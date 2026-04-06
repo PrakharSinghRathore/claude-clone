@@ -139,8 +139,8 @@ class Config:
             "import_obsidian": False,
             "obsidian_vault_path": None,
         },
-        # ── Hermes Agent Integration ──
-        "hermes": {
+        # ── Atlas Agent Integration ──
+        "atlas": {
             "enabled": True,
             "version": "0.7.0",
             "context_compression": {
@@ -172,41 +172,85 @@ class Config:
                 "retention_days": 30,
             },
         },
-        "hermes_tools": {
+        "atlas_tools": {
             "enabled": True,
             "auto_discover": True,
             "disabled_toolsets": [],
             "disabled_tools": [],
         },
-        "hermes_gateway": {
+        "atlas_gateway": {
             "enabled": False,
             "platforms": {},
             "session_timeout": 3600,
             "max_concurrent_sessions": 100,
             "webhook_secret": "",
         },
-        "hermes_cron": {
+        "atlas_cron": {
             "enabled": False,
             "storage_path": "~/.claude_clone/cron/",
             "tick_interval": 60,
             "max_concurrent_jobs": 5,
         },
-        "hermes_memory_plugins": {
+        "atlas_memory_plugins": {
             "enabled": False,
             "active_plugin": None,
             "plugin_dir": "~/.claude_clone/memory_plugins/",
         },
-        "hermes_skills": {
+        "atlas_skills": {
             "enabled": True,
-            "builtin_dir": "hermes/skills/builtins/",
+            "builtin_dir": "atlas/skills/builtins/",
             "custom_dir": "~/.claude_clone/skills/",
         },
-        "hermes_acp": {
+        "atlas_acp": {
             "enabled": False,
             "host": "0.0.0.0",
             "port": 8765,
             "api_key": "",
             "cors_origins": ["*"],
+        },
+        # ── Atlas v3.0 New Sub-system Configs ──
+        "atlas_canvas": {
+            "enabled": False,
+            "host": "localhost",
+            "port": 9100,
+            "theme": "default",
+            "max_widgets": 50,
+            "auto_refresh": True,
+            "refresh_interval": 2,
+        },
+        "atlas_voice": {
+            "enabled": False,
+            "stt_engine": "google",
+            "tts_engine": "pyttsx3",
+            "language": "en-US",
+            "continuous": False,
+            "wake_word": "hey claude",
+            "volume": 0.8,
+            "rate": 1.0,
+            "noise_threshold": 0.5,
+            "max_recording_seconds": 60,
+        },
+        "atlas_i18n": {
+            "locale": "en",
+            "fallback_locale": "en",
+            "locales_dir": "atlas/i18n/locales/",
+            "auto_detect": False,
+            "supported_locales": ["en", "es", "zh", "ja", "ko", "de", "fr", "pt", "ru"],
+        },
+        "atlas_sandbox": {
+            "enabled": True,
+            "type": "process",  # none, docker, process, restricted
+            "max_memory_mb": 512,
+            "default_timeout": 30,
+            "auto_cleanup": True,
+            "network_access": False,
+            "allowed_paths": [],
+        },
+        "atlas_openclaw": {
+            "enabled": False,
+            "modules": [],
+            "auto_register": True,
+            "module_dir": "~/.claude_clone/openclaw/",
         },
     }
 
@@ -269,14 +313,20 @@ class Config:
         self.desktop = dict(self.DEFAULTS["desktop"])
         self.self_improving = dict(self.DEFAULTS["self_improving"])
         self.knowledge_base = dict(self.DEFAULTS["knowledge_base"])
-        # Hermes integration sections
-        self.hermes = dict(self.DEFAULTS["hermes"])
-        self.hermes_tools = dict(self.DEFAULTS["hermes_tools"])
-        self.hermes_gateway = dict(self.DEFAULTS["hermes_gateway"])
-        self.hermes_cron = dict(self.DEFAULTS["hermes_cron"])
-        self.hermes_memory_plugins = dict(self.DEFAULTS["hermes_memory_plugins"])
-        self.hermes_skills = dict(self.DEFAULTS["hermes_skills"])
-        self.hermes_acp = dict(self.DEFAULTS["hermes_acp"])
+        # Atlas integration sections
+        self.Atlas = dict(self.DEFAULTS["atlas"])
+        self.atlas_tools = dict(self.DEFAULTS["atlas_tools"])
+        self.atlas_gateway = dict(self.DEFAULTS["atlas_gateway"])
+        self.atlas_cron = dict(self.DEFAULTS["atlas_cron"])
+        self.atlas_memory_plugins = dict(self.DEFAULTS["atlas_memory_plugins"])
+        self.atlas_skills = dict(self.DEFAULTS["atlas_skills"])
+        self.atlas_acp = dict(self.DEFAULTS["atlas_acp"])
+        # Atlas v3.0 new sections
+        self.atlas_canvas = dict(self.DEFAULTS["atlas_canvas"])
+        self.atlas_voice = dict(self.DEFAULTS["atlas_voice"])
+        self.atlas_i18n = dict(self.DEFAULTS["atlas_i18n"])
+        self.atlas_sandbox = dict(self.DEFAULTS["atlas_sandbox"])
+        self.atlas_openclaw = dict(self.DEFAULTS["atlas_openclaw"])
 
     def _detect_provider(self) -> str:
         """Detect API provider from available keys."""
@@ -316,6 +366,19 @@ class Config:
 
         return config
 
+    # Parameter names accepted by __init__ — section configs are handled separately
+    _SCALAR_KEYS = frozenset({
+        "model", "max_tokens", "max_iterations", "theme", "temperature",
+        "mcp_servers", "allowed_tools", "disabled_tools", "auto_approve_tools",
+        "system_prompt_overrides", "context_files", "cost_warning_threshold",
+        "provider", "base_url", "active_agent",
+    })
+
+    # Mapping from JSON config keys to attribute names (where they differ)
+    _SECTION_ATTR_MAP = {
+        "atlas": "Atlas",
+    }
+
     @classmethod
     def load(cls, path: Optional[str] = None) -> "Config":
         """Load configuration from a JSON file."""
@@ -333,8 +396,9 @@ class Config:
             print(f"Warning: Could not load config from {config_path}: {e}")
             return cls()
 
+        # Only pass scalar (non-section) keys as constructor kwargs
         kwargs = {}
-        for key in cls.DEFAULTS:
+        for key in cls._SCALAR_KEYS:
             if key in data:
                 kwargs[key] = data[key]
 
@@ -355,11 +419,12 @@ class Config:
             config.active_agent = data["active_agent"]
 
         # Load new feature section configs
-        for section in ("sandbox", "memory", "analyzer", "security", "deployment", "plugins", "collaboration", "desktop", "self_improving", "knowledge_base", "hermes", "hermes_tools", "hermes_gateway", "hermes_cron", "hermes_memory_plugins", "hermes_skills", "hermes_acp"):
+        for section in ("sandbox", "memory", "analyzer", "security", "deployment", "plugins", "collaboration", "desktop", "self_improving", "knowledge_base", "atlas", "atlas_tools", "atlas_gateway", "atlas_cron", "atlas_memory_plugins", "atlas_skills", "atlas_acp", "atlas_canvas", "atlas_voice", "atlas_i18n", "atlas_sandbox", "atlas_openclaw"):
             if section in data and isinstance(data[section], dict):
-                merged = dict(getattr(config, section))
+                attr_name = cls._SECTION_ATTR_MAP.get(section, section)
+                merged = dict(getattr(config, attr_name))
                 merged.update(data[section])
-                setattr(config, section, merged)
+                setattr(config, attr_name, merged)
 
         return config
 
@@ -394,13 +459,18 @@ class Config:
             "desktop": self.desktop,
             "self_improving": self.self_improving,
             "knowledge_base": self.knowledge_base,
-            "hermes": self.hermes,
-            "hermes_tools": self.hermes_tools,
-            "hermes_gateway": self.hermes_gateway,
-            "hermes_cron": self.hermes_cron,
-            "hermes_memory_plugins": self.hermes_memory_plugins,
-            "hermes_skills": self.hermes_skills,
-            "hermes_acp": self.hermes_acp,
+            "atlas": self.Atlas,
+            "atlas_tools": self.atlas_tools,
+            "atlas_gateway": self.atlas_gateway,
+            "atlas_cron": self.atlas_cron,
+            "atlas_memory_plugins": self.atlas_memory_plugins,
+            "atlas_skills": self.atlas_skills,
+            "atlas_acp": self.atlas_acp,
+            "atlas_canvas": self.atlas_canvas,
+            "atlas_voice": self.atlas_voice,
+            "atlas_i18n": self.atlas_i18n,
+            "atlas_sandbox": self.atlas_sandbox,
+            "atlas_openclaw": self.atlas_openclaw,
         }
 
         # Only save API key if explicitly set (not from env)
@@ -439,6 +509,18 @@ class Config:
             "desktop": self.desktop,
             "self_improving": self.self_improving,
             "knowledge_base": self.knowledge_base,
+            "atlas": self.Atlas,
+            "atlas_tools": self.atlas_tools,
+            "atlas_gateway": self.atlas_gateway,
+            "atlas_cron": self.atlas_cron,
+            "atlas_memory_plugins": self.atlas_memory_plugins,
+            "atlas_skills": self.atlas_skills,
+            "atlas_acp": self.atlas_acp,
+            "atlas_canvas": self.atlas_canvas,
+            "atlas_voice": self.atlas_voice,
+            "atlas_i18n": self.atlas_i18n,
+            "atlas_sandbox": self.atlas_sandbox,
+            "atlas_openclaw": self.atlas_openclaw,
         }
 
     def validate(self) -> List[str]:
@@ -531,3 +613,23 @@ class Config:
     def get_desktop_config(self) -> dict:
         """Return a copy of the desktop configuration."""
         return dict(self.desktop)
+
+    def get_atlas_canvas_config(self) -> dict:
+        """Return a copy of the Atlas Canvas configuration."""
+        return dict(self.atlas_canvas)
+
+    def get_atlas_voice_config(self) -> dict:
+        """Return a copy of the Atlas Voice configuration."""
+        return dict(self.atlas_voice)
+
+    def get_atlas_i18n_config(self) -> dict:
+        """Return a copy of the Atlas i18n configuration."""
+        return dict(self.atlas_i18n)
+
+    def get_atlas_sandbox_config(self) -> dict:
+        """Return a copy of the Atlas Sandbox configuration."""
+        return dict(self.atlas_sandbox)
+
+    def get_atlas_openclaw_config(self) -> dict:
+        """Return a copy of the Atlas OpenClaw configuration."""
+        return dict(self.atlas_openclaw)
