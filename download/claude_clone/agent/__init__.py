@@ -36,6 +36,9 @@ try:
     from atlas.acp.server import create_acp_app
     from atlas.gateway.runner import GatewayRunner
     from atlas.gateway.config import GatewayConfig
+    from atlas.plugin_sdk import PluginLoader, PluginRegistry as AtlasPluginRegistry
+    from atlas.hooks.system import HookSystem, HookPoint, HookContext
+    from atlas.i18n.loader import I18nManager
     ATLAS_AVAILABLE = True
 except ImportError as e:
     ATLAS_AVAILABLE = False
@@ -59,4 +62,6 @@ __all__ = [
     "ModelMetadata", "UsagePricing", "AuxiliaryClient", "PIIRedactor",
     "ToolRegistry", "SkillManager", "CronScheduler", "JobManager",
     "MemoryPluginRegistry", "create_acp_app", "GatewayRunner", "GatewayConfig",
+    "PluginLoader", "AtlasPluginRegistry", "HookSystem", "HookPoint", "HookContext",
+    "I18nManager",
 ]

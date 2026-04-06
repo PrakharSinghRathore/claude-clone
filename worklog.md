@@ -1,4 +1,39 @@
 ---
+## Task ID: 15 - dedup-cleanup-rewire
+### Work Task
+Check for duplicate features between root-level modules (hooks/, i18n/, plugins/) and their atlas/ counterparts. Remove duplicates and rewire everything to use the atlas versions.
+
+### Work Summary
+
+**Audit Results:**
+- `hooks/` (3 files, ~147 lines) — Primitive stubs (HookContext, HookResult dataclasses + simple decorators). Replaced by `atlas/hooks/` (1,186 lines) with full HookSystem, HookPoint enum, priority-based async execution, error isolation, retry/timeout, stats, history.
+- `i18n/` (2 files, ~108 lines) — Simple flat key-value I18N class. Replaced by `atlas/i18n/` (1,308 lines) with I18nManager, locale fallback chains, ICU plural/select syntax, 60+ locale aliases, nested JSON support, thread-safe.
+- `plugins/` (2 files, ~1,001 lines) — PluginManager with hot-reload. Replaced by `atlas/plugin_sdk/` (4,596 lines across 6 files) with PluginLoader, PluginRegistry, PluginSandbox, ManifestParser, contracts system, dependency resolution.
+- `hooks/` had 0 external consumers (only self-referencing)
+- `i18n/` had 0 external consumers (only self-referencing)
+- `plugins/` had 1 external consumer: `agent/core.py` line 30
+
+**Changes Made:**
+1. **agent/core.py** — Replaced `from plugins.loader import PluginManager` with a new `PluginManager` compatibility adapter class that delegates to `atlas.plugin_sdk.PluginLoader` (for tools) and `atlas.hooks.system.HookSystem` (for hooks). The adapter preserves the same interface (`load_all()`, `get_tools()`, `execute_hook(name, data)`, `list_active()`) so no other code in core.py needed changes.
+2. **agent/__init__.py** — Added exports for `PluginLoader`, `AtlasPluginRegistry`, `HookSystem`, `HookPoint`, `HookContext`, `I18nManager` from atlas.
+3. **Deleted** `hooks/`, `i18n/`, `plugins/` directories (7 files total).
+
+**Verification:**
+- `agent/core.py` — py_compile OK
+- `agent/__init__.py` — py_compile OK
+- `atlas_bridge.py` — py_compile OK
+- `main.py` — py_compile OK
+- `config.py`, `cli/app.py`, `agent/tools.py` — py_compile OK
+- All 9 atlas module files (plugin_sdk/*, hooks/*, i18n/*) — py_compile OK
+- Full codebase scan: 0 stale references to deleted modules found (1 false positive in a docstring comment)
+
+Stage Summary:
+- 3 duplicate root-level directories removed (hooks/, i18n/, plugins/)
+- 1 compatibility adapter added in agent/core.py
+- 6 new atlas exports added to agent/__init__.py
+- All files pass syntax validation
+
+---
 ## Task ID: 14 - atlas-media-canvas-builder
 ### Work Task
 Create TWO new modules in `atlas/` inspired by OpenClaw's media pipeline and canvas/A2UI system: `atlas/media/` (6 files, media processing pipeline) and `atlas/canvas/` (3 files, Agent-to-UI system). Each file requires comprehensive production-quality Python with full docstrings, type hints, error handling, and logging.

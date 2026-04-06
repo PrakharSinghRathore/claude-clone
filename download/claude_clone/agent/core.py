@@ -27,7 +27,104 @@ from agent.analyzer import ProjectAnalyzer
 from agent.security import SecurityScanner
 from agent.self_improving import SelfImprovingOrchestrator
 from agent.knowledge_base import KnowledgeBaseOrchestrator, get_knowledge_base, set_knowledge_base
-from plugins.loader import PluginManager
+
+# ── Atlas Plugin/Hook adapter (replaces legacy plugins.loader) ──
+_AtlasPluginLoader = None
+_AtlasHookSystem = None
+_AtlasPluginRegistry = None
+
+
+def _init_atlas_plugin_system():
+    """Lazily import Atlas plugin SDK and hook system."""
+    global _AtlasPluginLoader, _AtlasPluginHookSystem, _AtlasPluginRegistry
+    try:
+        from atlas.plugin_sdk import PluginLoader, PluginRegistry as _PR
+        from atlas.hooks.system import HookSystem
+        _AtlasPluginLoader = PluginLoader
+        _AtlasPluginHookSystem = HookSystem
+        _AtlasPluginRegistry = _PR
+        return True
+    except ImportError:
+        return False
+
+
+class PluginManager:
+    """
+    Compatibility adapter that delegates to Atlas PluginLoader + HookSystem.
+
+    This replaces the legacy root-level plugins.loader.PluginManager.
+    All hook/tool logic now flows through atlas.plugin_sdk and atlas.hooks.
+    """
+
+    def __init__(self):
+        self._loader = None
+        self._hook_system = None
+        self._registry = None
+        _init_atlas_plugin_system()
+        if _AtlasPluginLoader is not None:
+            self._registry = _AtlasPluginRegistry()
+            self._loader = _AtlasPluginLoader(registry=self._registry)
+        if _AtlasPluginHookSystem is not None:
+            self._hook_system = _AtlasPluginHookSystem()
+
+    async def load_all(self):
+        """Load all discovered plugins (sync in atlas, wrapped for compat)."""
+        if self._loader:
+            self._loader.load_all()
+
+    def get_tools(self):
+        """Return plugin tools as {name: callable} dict for Agent.tools."""
+        if not self._loader:
+            return {}
+        tools = {}
+        all_tools = self._loader.get_all_tools()
+        for plugin_name, tool_defs in all_tools.items():
+            for td in tool_defs:
+                if hasattr(td, 'handler') and callable(td.handler):
+                    tools[td.name] = td.handler
+                elif hasattr(td, 'function') and callable(td.function):
+                    tools[td.name] = td.function
+        return tools
+
+    async def execute_hook(self, hook_name: str, data: dict):
+        """Execute a hook by string name (e.g. 'PRE_EXECUTION')."""
+        if not self._hook_system:
+            return
+        try:
+            from atlas.hooks.system import HookPoint, HookContext
+            # Map string names to HookPoint enum values
+            hook_map = {
+                "PRE_EXECUTION": HookPoint.PRE_EXECUTION,
+                "POST_EXECUTION": HookPoint.POST_EXECUTION,
+                "PRE_TOOL_CALL": HookPoint.PRE_TOOL_CALL,
+                "POST_TOOL_CALL": HookPoint.POST_TOOL_CALL,
+                "ON_ERROR": HookPoint.ON_ERROR,
+                "ON_MESSAGE": HookPoint.ON_MESSAGE,
+                "ON_RESPONSE": HookPoint.ON_RESPONSE,
+                "PRE_SEND": HookPoint.PRE_SEND,
+                "POST_SEND": HookPoint.POST_SEND,
+                "ON_CONNECT": HookPoint.ON_CONNECT,
+                "ON_DISCONNECT": HookPoint.ON_DISCONNECT,
+                "SESSION_START": HookPoint.SESSION_START,
+                "SESSION_END": HookPoint.SESSION_END,
+                "CONFIG_CHANGE": HookPoint.CONFIG_CHANGE,
+                "PLUGIN_LOAD": HookPoint.PLUGIN_LOAD,
+                "PLUGIN_UNLOAD": HookPoint.PLUGIN_UNLOAD,
+            }
+            hp = hook_map.get(hook_name)
+            if hp is not None:
+                ctx = HookContext(hook_point=hp, data=data)
+                await self._hook_system.execute(hp, ctx)
+        except ImportError:
+            pass
+        except Exception:
+            pass
+
+    def list_active(self):
+        """Return list of active plugin names."""
+        if not self._registry:
+            return []
+        return [p.name for p in self._registry.list_active()]
 
 
 # ──────────────────────────────────────────────
