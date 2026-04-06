@@ -32,11 +32,18 @@ class Process(str, Enum):
                        critical workflows where multiple perspectives improve
                        reliability. This is the most expensive process in terms
                        of token usage.
+
+        parallel:      Execute independent tasks concurrently using asyncio.gather.
+                       Tasks with no dependencies on each other run in parallel.
+                       Tasks with context dependencies wait for their dependencies
+                       to complete before starting. This maximizes throughput for
+                       workflows with independent sub-tasks.
     """
 
     sequential = "sequential"
     hierarchical = "hierarchical"
     consensual = "consensual"
+    parallel = "parallel"
 
     def __str__(self) -> str:
         return self.value

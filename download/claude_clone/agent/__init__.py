@@ -14,6 +14,27 @@ from agent.task_queue import TaskQueue, TaskPriority, TaskStatus, BackgroundTask
 from agent.feedback import FeedbackCollector, FeedbackRating, FeedbackEntry
 from agent.self_improving import SelfImprovingOrchestrator
 
+# Semantic Search
+try:
+    from agent.semantic_search import (
+        SemanticSearchEngine, EmbeddingEngine, HybridSearchEngine, EmbeddingCache,
+    )
+    SEMANTIC_SEARCH_AVAILABLE = True
+except ImportError as e:
+    SEMANTIC_SEARCH_AVAILABLE = False
+    logging.getLogger(__name__).debug("Semantic search not available: %s", e)
+
+# Auto-Test Generation
+try:
+    from agent.auto_test import (
+        TestGenerator, TestRunner, TestReporter,
+        GeneratedTest, TestResult, TestSuiteResult, CoverageReport,
+    )
+    AUTO_TEST_AVAILABLE = True
+except ImportError as e:
+    AUTO_TEST_AVAILABLE = False
+    logging.getLogger(__name__).debug("Auto-test not available: %s", e)
+
 # Atlas Agent Integration
 try:
     from atlas.core.prompt_builder import PromptBuilder
@@ -64,4 +85,11 @@ __all__ = [
     "MemoryPluginRegistry", "create_acp_app", "GatewayRunner", "GatewayConfig",
     "PluginLoader", "AtlasPluginRegistry", "HookSystem", "HookPoint", "HookContext",
     "I18nManager",
+    # Semantic Search exports
+    "SEMANTIC_SEARCH_AVAILABLE",
+    "SemanticSearchEngine", "EmbeddingEngine", "HybridSearchEngine", "EmbeddingCache",
+    # Auto-Test exports
+    "AUTO_TEST_AVAILABLE",
+    "TestGenerator", "TestRunner", "TestReporter",
+    "GeneratedTest", "TestResult", "TestSuiteResult", "CoverageReport",
 ]

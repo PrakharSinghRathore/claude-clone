@@ -2,7 +2,7 @@
 Crew orchestration — the central coordination layer.
 
 A **Crew** groups agents and tasks together and defines the execution process
-(sequential, hierarchical, or consensual). Calling :meth:`kickoff` runs the
+(sequential, hierarchical, consensual, or parallel). Calling :meth:`kickoff` runs the
 entire pipeline and returns a :class:`CrewOutput`.
 """
 
@@ -100,7 +100,7 @@ class Crew(BaseModel):
         name:                 Optional crew name (for logging/display).
         tasks:                Ordered list of tasks to execute.
         agents:               List of agents available for task execution.
-        process:              Execution strategy (sequential / hierarchical / consensual).
+        process:              Execution strategy (sequential / hierarchical / consensual / parallel).
         verbose:              Enable detailed logging.
         memory:               Maintain conversation memory across tasks.
         cache:                Cache tool results.
@@ -290,6 +290,8 @@ class Crew(BaseModel):
                 outputs = await self._run_hierarchical_process()
             case Process.consensual:
                 outputs = await self._run_consensual_process()
+            case Process.parallel:
+                outputs = await self._run_parallel_process()
             case _:
                 raise ValueError(f"Unknown process: {self.process}")
 
@@ -557,6 +559,36 @@ class Crew(BaseModel):
                     self.task_callback(best_output)
                 except Exception as e:
                     logger.error("Task callback error: %s", e)
+
+        return outputs
+
+    # ──────────────────────────────────────────────
+    # Parallel process
+    # ──────────────────────────────────────────────
+
+    async def _run_parallel_process(self) -> List[TaskOutput]:
+        """
+        Execute tasks in parallel where possible, respecting dependencies.
+
+        Uses :class:`~crew.parallel.ParallelExecutionEngine` to run independent
+        tasks concurrently via ``asyncio.gather``, while ensuring that tasks
+        with context dependencies wait for their predecessors to complete.
+
+        Returns:
+            A list of :class:`TaskOutput` in completion order.
+        """
+        from crew.parallel import ParallelExecutionEngine
+
+        engine = ParallelExecutionEngine(max_concurrent=self.max_rpm or 4)
+        outputs, stats = await engine.execute(
+            tasks=self.tasks,
+            agents=self.agents,
+            verbose=self.verbose,
+            task_callback=self.task_callback,
+        )
+
+        if self.verbose:
+            logger.info("Parallel process stats: %s", stats)
 
         return outputs
 
