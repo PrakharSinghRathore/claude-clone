@@ -13,6 +13,7 @@ Provides customizable visual themes with:
 import json
 import os
 import re
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
