@@ -83,6 +83,30 @@ from agent.self_improving.evolution import (
     Generation,
 )
 
+# The SelfImprovingOrchestrator lives in agent/self_improving.py (a module at the
+# same level as this package directory).  Since Python prefers packages over
+# bare modules when both exist, we use importlib to load the .py file directly
+# and register it under a private module name so dataclass annotations resolve.
+import importlib.util as _ilu
+import os as _os
+import sys as _sys
+
+_orch_path = _os.path.join(_os.path.dirname(__file__), "..", "self_improving.py")
+_orch_path = _os.path.realpath(_orch_path)
+_orch_spec = _ilu.spec_from_file_location(
+    "agent.self_improving._orchestrator", _orch_path,
+    submodule_search_locations=[],
+)
+_orch_mod = _ilu.module_from_spec(_orch_spec)
+_orch_mod.__package__ = "agent.self_improving"
+_orch_mod.__file__ = _orch_path
+_sys.modules["agent.self_improving._orchestrator"] = _orch_mod
+_orch_spec.loader.exec_module(_orch_mod)
+
+SelfImprovingOrchestrator = _orch_mod.SelfImprovingOrchestrator
+ImprovementCycle = _orch_mod.ImprovementCycle
+SystemStatus = _orch_mod.SystemStatus
+
 __all__ = [
     # Safety
     "SafetyGuardrails", "SafetyEvaluation", "ChangeType", "ApprovalLevel",
@@ -100,4 +124,6 @@ __all__ = [
     "SelfLearner", "InteractionRecord", "UserPreference", "UserProfile", "Adaptation",
     # Evolution
     "EvolutionTracker", "EvolutionEvent", "EvolutionScore", "ChangeLineage", "Generation",
+    # Orchestrator
+    "SelfImprovingOrchestrator", "ImprovementCycle", "SystemStatus",
 ]

@@ -46,18 +46,28 @@ class FileTreeItem:
 # File system event handler
 # ──────────────────────────────────────────────
 
-class FileChangeHandler(FileSystemEventHandler):
-    """Handles file system changes and triggers tree refresh."""
+if HAS_WATCHDOG:
+    class FileChangeHandler(FileSystemEventHandler):
+        """Handles file system changes and triggers tree refresh."""
 
-    def __init__(self, callback: Callable):
-        self.callback = callback
+        def __init__(self, callback: Callable):
+            self.callback = callback
 
-    def on_any_event(self, event):
-        if event.src_path.endswith((".pyc", ".pyo", "__pycache__")):
-            return
-        try:
-            self.callback()
-        except Exception:
+        def on_any_event(self, event):
+            if event.src_path.endswith((".pyc", ".pyo", "__pycache__")):
+                return
+            try:
+                self.callback()
+            except Exception:
+                pass
+else:
+    class FileChangeHandler:
+        """Fallback no-op handler when watchdog is not installed."""
+
+        def __init__(self, callback: Callable):
+            self.callback = callback
+
+        def on_any_event(self, event):
             pass
 
 

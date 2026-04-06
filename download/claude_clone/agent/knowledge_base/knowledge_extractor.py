@@ -146,7 +146,7 @@ _SOLUTION_INDICATORS: List[re.Pattern[str]] = [
     re.compile(r"(?:try (?:using|adding|changing|replacing|setting))", re.IGNORECASE),
     re.compile(r"(?:the (?:correct|right|proper|best) (?:way|approach|method))", re.IGNORECASE),
     re.compile(r"(?:simply (?:use|add|remove|change|wrap))", re.IGNORECASE),
-    re.compile(r"(?:a (?:common (?:fix|solution|approach|pattern))", re.IGNORECASE),
+    re.compile(r"(?:a (?:common (?:fix|solution|approach|pattern)))", re.IGNORECASE),
 ]
 
 # Error message patterns (tracebacks, error names, etc.).
